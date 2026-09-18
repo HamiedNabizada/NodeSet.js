@@ -1,0 +1,7 @@
+{
+  "presets": [
+    ["@babel/preset-env", { "targets": "> 1%, last 2 versions, not dead" }],
+    ["@babel/preset-react", { "runtime": "automatic" }],
+    "@babel/preset-typescript"
+  ]
+}
