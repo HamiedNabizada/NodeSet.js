@@ -19,5 +19,7 @@ module.exports = (env, argv) => ({
   },
   plugins: [new HtmlWebpackPlugin({ template: './app/index.html', title: 'OPC UA Modeler' })],
   devServer: { port: 3002, hot: true },
+  // The base NodeSet is a lazy chunk of several MB by nature.
+  performance: { hints: false },
   devtool: argv.mode === 'production' ? false : 'eval-cheap-module-source-map',
 });
