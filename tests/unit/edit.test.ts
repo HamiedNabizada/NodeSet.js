@@ -96,3 +96,40 @@ describe('Editing a model', () => {
     expect(again.nodes[1].references).toContainEqual({ type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory });
   });
 });
+
+describe('Editing methods and data types', () => {
+  it('gives a method InputArguments and OutputArguments that survive saving', async () => {
+    const { ws, editor, start } = await pumpModel();
+    editor.setArguments(start, 'Input', [{ name: 'Speed', dataType: uaKey(11), valueRank: -1, arrayDimensions: [], description: { text: 'Target speed' } }]);
+    editor.setArguments(start, 'Output', [{ name: 'Accepted', dataType: uaKey(1), valueRank: -1, arrayDimensions: [] }]);
+
+    const props = ws.space.children(ws.space.get(start)!).map(c => c.node);
+    expect(props.map(p => p.browseName)).toEqual([
+      { namespaceUri: 'http://opcfoundation.org/UA/', name: 'InputArguments' },
+      { namespaceUri: 'http://opcfoundation.org/UA/', name: 'OutputArguments' },
+    ]);
+    const again = readNodeSet(ws.save()).nodes.find(n => n.browseName.name === 'InputArguments')!;
+    expect(again.arguments).toEqual([{ name: 'Speed', dataType: uaKey(11), valueRank: -1, arrayDimensions: [], description: { text: 'Target speed' } }]);
+
+    editor.setArguments(start, 'Input', []);
+    expect(ws.space.children(ws.space.get(start)!).map(c => c.node.browseName.name)).toEqual(['OutputArguments']);
+  });
+
+  it('defines structure fields and enumeration values with EnumStrings', async () => {
+    const { ws, editor } = await pumpModel();
+    const settings = editor.addType('DataType', 'PumpSettingsDataType');
+    editor.setFields(settings, [{ name: 'Speed', dataType: uaKey(11) }, { name: 'Tags', dataType: uaKey(12), valueRank: 1 }]);
+    const mode = editor.addType('DataType', 'PumpModeEnum', uaKey(29));
+    editor.setFields(mode, [{ name: 'Off' }, { name: 'Manual' }, { name: 'Automatic' }]);
+    editor.rename(mode, 'PumpMode');
+
+    const saved = readNodeSet(ws.save());
+    const s = saved.nodes.find(n => n.browseName.name === 'PumpSettingsDataType')!;
+    const m = saved.nodes.find(n => n.browseName.name === 'PumpMode')!;
+    expect(s.definition!.fields.map(f => [f.name, f.dataType, f.valueRank])).toEqual([['Speed', uaKey(11), -1], ['Tags', uaKey(12), 1]]);
+    expect(m.definition!.name.name).toBe('PumpMode');
+    expect(m.definition!.fields.map(f => [f.name, f.value])).toEqual([['Off', 0], ['Manual', 1], ['Automatic', 2]]);
+    expect(saved.nodes.find(n => n.browseName.name === 'EnumStrings')!.valueXml).toContain('<Text>Automatic</Text>');
+    expect(() => editor.setFields(mode, [{ name: 'A' }, { name: 'A' }])).toThrow(/Two fields/);
+  });
+});

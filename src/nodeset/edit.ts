@@ -8,7 +8,7 @@
 // the size of information models.
 
 import { AddressSpace, REF, RULE } from './address-space';
-import { NodeClass, NodeSetFile, parseNodeIdKey, Reference, UA_NAMESPACE, uaKey, UaNode } from './model';
+import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
 
@@ -26,6 +26,14 @@ export const TYPE_DEFINITIONS = {
 } as const;
 
 export type DeclarationKind = 'Object' | 'Variable' | 'Property' | 'Method';
+
+const ARGUMENT = uaKey(296);
+const STRUCTURE = uaKey(22);
+const ENUMERATION = uaKey(29);
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 export function newModel(modelUri: string, version = '1.0.0'): NodeSetFile {
   if (!/^[a-z][a-z0-9+.-]*:/i.test(modelUri)) throw new EditError(`'${modelUri}' is not a URI.`);
@@ -179,6 +187,7 @@ export class ModelEditor {
       }
       n.browseName = { ...n.browseName, name: trimmed };
       n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }];
+      if (n.definition) n.definition.name = n.browseName;
     });
   }
 
@@ -260,6 +269,108 @@ export class ModelEditor {
     });
   }
 
+  /**
+   * Sets the InputArguments or OutputArguments of a method, creating or
+   * removing the property as needed (OPC 10000-3 5.7.2).
+   */
+  setArguments(method: string, which: 'Input' | 'Output', args: Argument[]): void {
+    this.change(() => {
+      const m = this.node(method);
+      if (m.nodeClass !== 'Method') throw new EditError('Only a Method has arguments.');
+      const names = new Set<string>();
+      for (const a of args) {
+        if (!a.name.trim()) throw new EditError('Every argument needs a name.');
+        if (names.has(a.name.trim())) throw new EditError(`Two arguments are named '${a.name.trim()}'.`);
+        names.add(a.name.trim());
+        if (this.space().get(a.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${a.name}' is not a DataType.`);
+      }
+      const browseName = `${which}Arguments`;
+      const existing = this.space().children(m).find(c => c.node.browseName.name === browseName && c.node.browseName.namespaceUri === UA_NAMESPACE);
+      if (args.length === 0) {
+        if (existing) this.removeNodes(new Set([existing.node.id]));
+        return;
+      }
+      let p = existing ? this.node(existing.node.id) : undefined;
+      if (!p) {
+        p = this.create('Variable', browseName);
+        // A standard property: its BrowseName is in the UA namespace.
+        p.browseName = { namespaceUri: UA_NAMESPACE, name: browseName };
+        m.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
+        p.references.push(
+          { type: REF.HasProperty, isForward: false, target: m.id },
+          { type: REF.HasTypeDefinition, isForward: true, target: uaKey(68) },
+          { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
+        );
+        p.parent = m.id;
+        p.dataType = ARGUMENT;
+        p.valueRank = 1;
+      }
+      p.arrayDimensions = String(args.length);
+      p.arguments = args.map(a => ({ ...a, name: a.name.trim() }));
+      p.valueXml = undefined;
+    });
+  }
+
+  /**
+   * Sets the fields of a structure or the values of an enumeration. An
+   * enumeration gets its EnumStrings property; its values are 0, 1, 2 … in
+   * the order given.
+   */
+  setFields(dataType: string, fields: { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string }[]): void {
+    this.change(() => {
+      const d = this.node(dataType);
+      if (d.nodeClass !== 'DataType') throw new EditError('Only a DataType has fields.');
+      const isEnum = this.space().isSubtypeOf(d.id, ENUMERATION);
+      if (!isEnum && !this.space().isSubtypeOf(d.id, STRUCTURE)) {
+        throw new EditError('Fields belong to structures (subtypes of Structure) and enumerations (subtypes of Enumeration).');
+      }
+      const names = new Set<string>();
+      for (const f of fields) {
+        if (!f.name.trim()) throw new EditError('Every field needs a name.');
+        if (names.has(f.name.trim())) throw new EditError(`Two fields are named '${f.name.trim()}'.`);
+        names.add(f.name.trim());
+        if (!isEnum && this.space().get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
+      }
+      d.definition = {
+        name: d.browseName,
+        otherAttributes: d.definition?.otherAttributes ?? {},
+        fields: fields.map((f, i) => ({
+          name: f.name.trim(),
+          ...(isEnum ? { value: i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
+          description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
+          displayName: [],
+          otherAttributes: {},
+        })),
+      };
+      if (isEnum) this.setEnumStrings(d, fields.map(f => f.name.trim()));
+    });
+  }
+
+  private setEnumStrings(d: UaNode, names: string[]) {
+    const existing = this.space().children(d).find(c => c.node.browseName.name === 'EnumStrings' && c.node.browseName.namespaceUri === UA_NAMESPACE);
+    let p = existing ? this.node(existing.node.id) : undefined;
+    if (!p) {
+      p = this.create('Variable', 'EnumStrings');
+      p.browseName = { namespaceUri: UA_NAMESPACE, name: 'EnumStrings' };
+      d.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
+      p.references.push(
+        { type: REF.HasProperty, isForward: false, target: d.id },
+        { type: REF.HasTypeDefinition, isForward: true, target: uaKey(68) },
+        { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
+      );
+      p.parent = d.id;
+      p.dataType = uaKey(21); // LocalizedText
+      p.valueRank = 1;
+    }
+    p.arrayDimensions = String(names.length);
+    p.valueXml = `<ListOfLocalizedText xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">${names.map(n => `<LocalizedText><Text>${escapeXml(n)}</Text></LocalizedText>`).join('')}</ListOfLocalizedText>`;
+  }
+
+  private removeNodes(doomed: Set<string>) {
+    this.file.nodes = this.file.nodes.filter(n => !doomed.has(n.id));
+    for (const n of this.file.nodes) n.references = n.references.filter(r => !doomed.has(r.target));
+  }
+
   /** Whether a node belongs to the model being edited. */
   owns(key: string): boolean {
     return this.file.nodes.some(n => n.id === key);
@@ -304,8 +415,7 @@ export class ModelEditor {
       if (this.file.nodes.some(n => !doomed.has(n.id) && n.references.some(r => r.type === REF.HasSubtype && !r.isForward && doomed.has(r.target)))) {
         throw new EditError(`'${root.browseName.name}' has subtypes; delete or move them first.`);
       }
-      this.file.nodes = this.file.nodes.filter(n => !doomed.has(n.id));
-      for (const n of this.file.nodes) n.references = n.references.filter(r => !doomed.has(r.target));
+      this.removeNodes(doomed);
       return [...doomed];
     });
   }
