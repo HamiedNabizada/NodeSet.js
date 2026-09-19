@@ -18,7 +18,7 @@ rules, checks, NodeSet in and out.
 | M3 | Editing: properties panel, arguments, fields, references, checks, undo, save | done |
 | M4 | Instances by ModellingRule | done |
 | M5 | Embedding in the AMLOpcUa plugin through WebView2, exchange with the C# core | done |
-| M6 | Library build, standalone build, documentation | |
+| M6 | Library build, standalone build, documentation | done |
 
 ## Decisions
 
