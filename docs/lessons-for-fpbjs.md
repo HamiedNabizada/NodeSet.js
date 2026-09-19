@@ -164,6 +164,17 @@ to answer modal dialogs) and renders each tab with `RenderTargetBitmap`.
 WebView2 content is an HWND and does not appear in such a picture.
 *FPB plugin:* the same probe would show every view after a change.
 
+**Test in the editor's dark theme, and never restyle its controls blind.**
+The editor themes plugins with Aml.Skins on MahApps.Metro. A plugin's own
+`Style TargetType="TabItem"` without `BasedOn` replaced the editor's style,
+fell back to plain WPF and passed black text to everything inside; fixed light
+surfaces showed the dark theme's white text on white. The OPC UA plugin now
+mixes its surfaces, lines and grey text from `MahApps.Brushes.ThemeBackground`,
+`ThemeForeground` and `Accent` (`ThemePalette`), and a probe loads MahApps,
+Aml.Skins and `ThemeManager.ChangeTheme(app, "Dark.Blue")` to check both
+themes by screenshot.
+*FPB plugin:* worth the same check; any fixed `Background="White"` is suspect.
+
 **One frame for every dialog.** The OPC UA plugin's eight dialogs share a
 small kit (`DialogKit`): a header with the command's glyph in the colour of
 its kind, a title and one sentence on what the dialog does; search boxes with
