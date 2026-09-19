@@ -51,13 +51,13 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   );
 }
 
-interface FieldDraft { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string }
+interface FieldDraft { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }
 
 export function FieldsSection({ space, editor, dataType, run }: { space: AddressSpace; editor: ModelEditor; dataType: UaNode; run: Run }) {
   const isEnum = space.isSubtypeOf(dataType.id, uaKey(29));
   const isStructure = space.isSubtypeOf(dataType.id, uaKey(22));
   const current = useMemo<FieldDraft[]>(() => (dataType.definition?.fields ?? []).map(f => ({
-    name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: f.isOptional, description: text(f.description),
+    name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: f.isOptional, description: text(f.description), value: f.value,
   })), [dataType]);
   const [draft, setDraft] = useState<FieldDraft[]>(current);
   useEffect(() => setDraft(current), [current]);
@@ -70,7 +70,10 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
       <legend>{isEnum ? 'Values' : 'Fields'}</legend>
       {draft.map((f, i) => (
         <div className={`row${isEnum ? '' : ' item-row'}`} key={i}>
-          {isEnum && <span className="mono">{i}</span>}
+          {isEnum && (
+            <input className="value" type="number" step={1} value={f.value ?? i} title="Value"
+              onChange={e => update(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })} />
+          )}
           <input placeholder="Name" value={f.name} onChange={e => update(i, { name: e.target.value })} />
           {!isEnum && (
             <>
@@ -84,7 +87,9 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
         </div>
       ))}
       <div className="row">
-        <button onClick={() => setDraft(d => [...d, isEnum ? { name: '' } : { name: '', dataType: uaKey(12), valueRank: -1 }])}>
+        <button onClick={() => setDraft(d => [...d, isEnum
+          ? { name: '', value: d.length === 0 ? 0 : Math.max(...d.map((x, j) => x.value ?? j)) + 1 }
+          : { name: '', dataType: uaKey(12), valueRank: -1 }])}>
           + {isEnum ? 'Value' : 'Field'}
         </button>
         {changed && <button onClick={() => run(() => editor.setFields(dataType.id, draft))}>Apply</button>}

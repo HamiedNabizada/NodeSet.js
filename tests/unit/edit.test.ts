@@ -152,3 +152,21 @@ describe('Structure encodings', () => {
     expect(ws.space.out(mode, uaKey(38), false)).toEqual([]);
   });
 });
+
+describe('Enumeration values', () => {
+  it('uses EnumValues when the values have gaps, and EnumStrings again when they do not', async () => {
+    const { ws, editor } = await pumpModel();
+    const mode = editor.addType('DataType', 'ModeEnum', uaKey(29));
+    editor.setFields(mode, [{ name: 'Off', value: 0 }, { name: 'Auto', value: 10, description: 'Automatic' }]);
+    const props = () => ws.space.children(ws.space.get(mode)!).map(c => c.node);
+
+    expect(props().map(p => p.browseName.name)).toEqual(['EnumValues']);
+    expect(props()[0].dataType).toBe(uaKey(7594));
+    expect(props()[0].valueXml).toContain('<Value>10</Value><DisplayName><Text>Auto</Text></DisplayName><Description><Text>Automatic</Text>');
+    expect(ws.space.get(mode)!.definition!.fields.map(f => f.value)).toEqual([0, 10]);
+
+    editor.setFields(mode, [{ name: 'Off' }, { name: 'On' }]);
+    expect(props().map(p => p.browseName.name)).toEqual(['EnumStrings']);
+    expect(() => editor.setFields(mode, [{ name: 'A', value: 1 }, { name: 'B', value: 1 }])).toThrow(/same/);
+  });
+});

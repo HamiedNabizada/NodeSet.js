@@ -10,7 +10,7 @@
 import { AddressSpace, REF, RULE } from './address-space';
 import { insideType } from './checks';
 import { builtInOf, ValueError, valueXml } from './values';
-import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, UA_NAMESPACE, uaKey, UaNode } from './model';
+import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
 
@@ -44,6 +44,7 @@ const ARGUMENT = uaKey(296);
 const STRUCTURE = uaKey(22);
 const ENUMERATION = uaKey(29);
 const HAS_ENCODING = uaKey(38);
+const ENUM_VALUE_TYPE = uaKey(7594);
 
 function qualified(n: UaNode): string {
   return `${n.browseName.namespaceUri}|${n.browseName.name}`;
@@ -338,7 +339,7 @@ export class ModelEditor {
    * enumeration gets its EnumStrings property; its values are 0, 1, 2 … in
    * the order given.
    */
-  setFields(dataType: string, fields: { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string }[]): void {
+  setFields(dataType: string, fields: { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }[]): void {
     this.change(() => {
       const d = this.node(dataType);
       if (d.nodeClass !== 'DataType') throw new EditError('Only a DataType has fields.');
@@ -353,28 +354,44 @@ export class ModelEditor {
         names.add(f.name.trim());
         if (!isEnum && this.space().get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
       }
+      if (isEnum) {
+        const values = fields.map((f, i) => f.value ?? i);
+        if (values.some(v => !Number.isInteger(v))) throw new EditError('Enumeration values are integers.');
+        if (new Set(values).size !== values.length) throw new EditError('Two enumeration values are the same.');
+      }
       d.definition = {
         name: d.browseName,
         otherAttributes: d.definition?.otherAttributes ?? {},
         fields: fields.map((f, i) => ({
           name: f.name.trim(),
-          ...(isEnum ? { value: i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
+          ...(isEnum ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
           description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
           displayName: [],
           otherAttributes: {},
         })),
       };
-      if (isEnum) this.setEnumStrings(d, fields.map(f => f.name.trim()));
+      if (isEnum) this.setEnumProperties(d, d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) })));
       else this.ensureEncodings(d);
     });
   }
 
-  private setEnumStrings(d: UaNode, names: string[]) {
-    const existing = this.space().children(d).find(c => c.node.browseName.name === 'EnumStrings' && c.node.browseName.namespaceUri === UA_NAMESPACE);
-    let p = existing ? this.node(existing.node.id) : undefined;
+  /**
+   * The properties that name the values of an enumeration: EnumStrings when
+   * the values are 0, 1, 2 …, EnumValues otherwise (OPC 10000-3 5.8.3).
+   * The one not needed is removed.
+   */
+  private setEnumProperties(d: UaNode, entries: { name: string; value: number; description: string }[]) {
+    const contiguous = entries.every((e, i) => e.value === i);
+    const keep = contiguous ? 'EnumStrings' : 'EnumValues';
+    const drop = contiguous ? 'EnumValues' : 'EnumStrings';
+    const dropped = this.space().children(d).filter(c => c.node.browseName.name === drop && c.node.browseName.namespaceUri === UA_NAMESPACE);
+    if (dropped.length > 0) this.removeNodes(new Set(dropped.map(c => c.node.id)));
+
+    const existing = this.space().children(d).find(c => c.node.browseName.name === keep && c.node.browseName.namespaceUri === UA_NAMESPACE);
+    let p = existing && this.owns(existing.node.id) ? this.node(existing.node.id) : undefined;
     if (!p) {
-      p = this.create('Variable', 'EnumStrings');
-      p.browseName = { namespaceUri: UA_NAMESPACE, name: 'EnumStrings' };
+      p = this.create('Variable', keep);
+      p.browseName = { namespaceUri: UA_NAMESPACE, name: keep };
       d.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
       p.references.push(
         { type: REF.HasProperty, isForward: false, target: d.id },
@@ -382,11 +399,16 @@ export class ModelEditor {
         { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
       );
       p.parent = d.id;
-      p.dataType = uaKey(21); // LocalizedText
       p.valueRank = 1;
     }
-    p.arrayDimensions = String(names.length);
-    p.valueXml = `<ListOfLocalizedText xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">${names.map(n => `<LocalizedText><Text>${escapeXml(n)}</Text></LocalizedText>`).join('')}</ListOfLocalizedText>`;
+    p.dataType = contiguous ? uaKey(21) : ENUM_VALUE_TYPE; // LocalizedText or EnumValueType
+    p.arrayDimensions = String(entries.length);
+    const types = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
+    p.valueXml = contiguous
+      ? `<ListOfLocalizedText xmlns="${types}">${entries.map(e => `<LocalizedText><Text>${escapeXml(e.name)}</Text></LocalizedText>`).join('')}</ListOfLocalizedText>`
+      : `<ListOfExtensionObject xmlns="${types}">${entries.map(e => '<ExtensionObject><TypeId><Identifier>i=7616</Identifier></TypeId><Body><EnumValueType>'
+        + `<Value>${e.value}</Value><DisplayName><Text>${escapeXml(e.name)}</Text></DisplayName>`
+        + `<Description>${e.description ? `<Text>${escapeXml(e.description)}</Text>` : ''}</Description></EnumValueType></Body></ExtensionObject>`).join('')}</ListOfExtensionObject>`;
   }
 
   /**
