@@ -15,6 +15,6 @@ export { Workspace } from './workspace';
 export { buildTypeDiagram } from './modeler/diagram-model';
 export type { Diagram, DiagramLine, DiagramShape, TypeDiagramOptions } from './modeler/diagram-model';
 export { UaModeler } from './modeler/Modeler';
-export { HostBridge } from './host/bridge';
+export { applyTheme, HostBridge } from './host/bridge';
 export type { HostToModeler, ModelerToHost } from './host/bridge';
 export { App } from './ui/App';

@@ -5,7 +5,7 @@ import { insideType } from '../nodeset/checks';
 import { check, Finding } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
-import { HostBridge, HostToModeler } from '../host/bridge';
+import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
@@ -119,6 +119,7 @@ export function App() {
     const stop = host.listen((m: HostToModeler) => {
       if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
       if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
+      if (m.type === 'theme') applyTheme(m.dark);
     });
     host.post({ type: 'ready', version: '0.1.0' });
     return stop;

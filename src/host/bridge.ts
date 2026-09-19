@@ -4,11 +4,13 @@
 //
 // The host sends a NodeSet to edit, with the NodeSets it requires, or asks for
 // a new model; the modeler answers "ready" once it listens, and sends the
-// NodeSet back when the user applies it.
+// NodeSet back when the user applies it. "theme" tells the modeler whether the
+// host is light or dark.
 
 export type HostToModeler =
   | { type: 'open'; name: string; xml: string; required?: string[] }
-  | { type: 'new'; modelUri: string; required?: string[] };
+  | { type: 'new'; modelUri: string; required?: string[] }
+  | { type: 'theme'; dark: boolean };
 
 export type ModelerToHost =
   | { type: 'ready'; version: string }
@@ -48,4 +50,9 @@ export class HostBridge {
 
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return undefined; }
+}
+
+/** Light or dark chrome; without a call the page follows the system. */
+export function applyTheme(dark: boolean): void {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
