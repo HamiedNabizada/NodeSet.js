@@ -1,4 +1,4 @@
-# UaModeler.js (working name)
+# InfoModel.js
 
 A graphical modeler for OPC UA information models. Types and instances are
 drawn in the notation of OPC 10000-3 Annex C and stored as NodeSet2 files,
@@ -44,7 +44,7 @@ npm run build       # dist/web (the app) and dist/lib (the library)
 ```
 
 ```ts
-import { readNodeSet, writeNodeSet, Workspace, UaModeler, App } from 'uamodeler-js';
+import { readNodeSet, writeNodeSet, Workspace, InfoModeler, App } from 'infomodel-js';
 
 const ws = new Workspace();
 await ws.open(xml);                         // loads the required UA and DI models
@@ -53,5 +53,5 @@ ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
 const nodeSet = ws.save();                  // NodeSet2 XML
 ```
 
-`App` is the complete modeler as a React component; `UaModeler` is the canvas
+`App` is the complete modeler as a React component; `InfoModeler` is the canvas
 alone. React 18 is a peer dependency.

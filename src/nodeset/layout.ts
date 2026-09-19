@@ -8,7 +8,11 @@ import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom'
 import { NodeSetFile, parseNodeIdKey } from './model';
 import { parseNodeIdText } from './reader';
 
-export const LAYOUT_NAMESPACE = 'urn:ua-modeler:diagram-layout:1';
+export const LAYOUT_NAMESPACE = 'urn:infomodel-js:diagram-layout:1';
+
+/** The namespace of layouts written before the modeler had its name; still read, replaced on writing. */
+const EARLIER_NAMESPACES = ['urn:ua-modeler:diagram-layout:1'];
+const ALL_NAMESPACES = [LAYOUT_NAMESPACE, ...EARLIER_NAMESPACES];
 
 export interface Position { x: number; y: number }
 
@@ -26,13 +30,14 @@ function expanded(key: string): string {
 export function readLayout(file: NodeSetFile): Layout {
   const layout: Layout = new Map();
   for (const raw of file.otherElements) {
-    if (!raw.includes(LAYOUT_NAMESPACE)) continue;
+    const ns = ALL_NAMESPACES.find(n => raw.includes(n));
+    if (!ns) continue;
     const doc = new DOMParser().parseFromString(raw, 'text/xml');
-    const diagrams = doc.getElementsByTagNameNS(LAYOUT_NAMESPACE, 'Diagram');
+    const diagrams = doc.getElementsByTagNameNS(ns, 'Diagram');
     for (let i = 0; i < diagrams.length; i++) {
       const d = diagrams[i] as XmlElement;
       const positions = new Map<string, Position>();
-      const shapes = d.getElementsByTagNameNS(LAYOUT_NAMESPACE, 'Shape');
+      const shapes = d.getElementsByTagNameNS(ns, 'Shape');
       for (let j = 0; j < shapes.length; j++) {
         const s = shapes[j] as XmlElement;
         positions.set(parseNodeIdText(s.getAttribute('Node') ?? '', noIndex), { x: Number(s.getAttribute('X')), y: Number(s.getAttribute('Y')) });
@@ -65,7 +70,7 @@ export function writeLayout(file: NodeSetFile, layout: Layout): void {
   for (let n = root.firstChild; n; n = n.nextSibling) {
     if (n.nodeType !== 1) continue;
     const s = serializer.serializeToString(n);
-    if (!s.includes(LAYOUT_NAMESPACE)) others.push(s);
+    if (!ALL_NAMESPACES.some(n => s.includes(n))) others.push(s);
   }
   const all = [...others, extension].filter(Boolean);
   if (all.length === 0) file.otherElements.splice(index, 1);

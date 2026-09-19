@@ -35,3 +35,16 @@ describe('Layout in the NodeSet', () => {
     expect(file.otherElements[0]).not.toContain(LAYOUT_NAMESPACE);
   });
 });
+
+describe('Layouts of earlier versions', () => {
+  it('reads a layout written under the working name and replaces it on writing', () => {
+    const file = readNodeSet(`<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"><NamespaceUris><Uri>http://example.org/Old/</Uri></NamespaceUris><Extensions><Extension><Layout xmlns="urn:ua-modeler:diagram-layout:1"><Diagram Node="nsu=http://example.org/Old/;i=1"><Shape Node="nsu=http://example.org/Old/;i=2" X="10" Y="20" /></Diagram></Layout></Extension></Extensions></UANodeSet>`);
+    const layout = readLayout(file);
+
+    expect(layout.get('http://example.org/Old/|i=1')?.get('http://example.org/Old/|i=2')).toEqual({ x: 10, y: 20 });
+    writeLayout(file, layout);
+    const written = file.otherElements.join('');
+    expect(written).toContain('urn:infomodel-js:diagram-layout:1');
+    expect(written).not.toContain('urn:ua-modeler:diagram-layout:1');
+  });
+});

@@ -51,5 +51,8 @@ itself.
 - **Logic in TypeScript.** The type system and instantiation exist here and in
   the C# core of AMLOpcUa. The modeler works on NodeSets alone; everything
   AutomationML stays in C#.
-- **Name.** "UaModeler" is a product of Unified Automation. The name is a
-  working title and has to change before anything is published.
+- **Name.** InfoModel.js, since 2026-09-19: it models OPC UA information
+  models, as FPB.js models formalized process descriptions. The working title
+  "UaModeler" is a product of Unified Automation; "OPC UA Modeler" (Prosys,
+  Sterfive) and "UA NodeSet Editor" (OPC Foundation) are taken too. Layouts
+  saved under the working title's namespace are still read.

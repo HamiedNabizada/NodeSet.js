@@ -1,5 +1,5 @@
 {
-  "name": "uamodeler-js",
+  "name": "infomodel-js",
   "version": "0.1.0",
   "private": true,
   "description": "Graphical modeler for OPC UA information models: types and instances in the notation of OPC 10000-3 Annex C, stored as NodeSet2.",
@@ -42,8 +42,8 @@
     "react-dom": "^18.3.1",
     "tiny-svg": "^4.1.4"
   },
-  "main": "dist/lib/uamodeler.umd.js",
-  "module": "dist/lib/uamodeler.esm.js",
+  "main": "dist/lib/infomodel.umd.js",
+  "module": "dist/lib/infomodel.esm.js",
   "types": "dist/types/index.d.ts",
   "files": [
     "dist/lib",

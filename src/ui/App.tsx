@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { UaModeler } from '../modeler/Modeler';
+import { InfoModeler } from '../modeler/Modeler';
 import { REF, RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { check, Finding } from '../nodeset/checks';
@@ -32,7 +32,7 @@ export function App() {
   const [showFindings, setShowFindings] = useState(false);
   const [newModelUri, setNewModelUri] = useState<string>();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const modelerRef = useRef<UaModeler>();
+  const modelerRef = useRef<InfoModeler>();
   const fittedFor = useRef<string>();
   // The redraw reads the selection without redrawing when only the selection changes.
   const selectedRef = useRef<string>();
@@ -156,7 +156,7 @@ export function App() {
   // The canvas lives as long as the workspace.
   useEffect(() => {
     if (!workspace || !canvasRef.current) return;
-    const modeler = new UaModeler(canvasRef.current, () => workspace.space, {
+    const modeler = new InfoModeler(canvasRef.current, () => workspace.space, {
       isOwn: key => workspace.editor?.owns(key) ?? false,
       canHoldChildren: key => ['ObjectType', 'VariableType', 'Object', 'Variable'].includes(workspace.space.get(key)?.nodeClass ?? ''),
       addChild: (key, kind) => {
@@ -266,7 +266,7 @@ export function App() {
   return (
     <div className="app">
       <div className="toolbar">
-        <span className="title">OPC UA Modeler</span>
+        <span className="title">InfoModel.js</span>
         {newModelUri === undefined
           ? <button onClick={() => setNewModelUri('http://example.org/MyModel/')}>New model…</button>
           : (

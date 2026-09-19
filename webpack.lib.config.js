@@ -20,7 +20,7 @@ module.exports = [
   {
     ...common,
     experiments: { outputModule: true },
-    output: { path: path.join(__dirname, 'dist/lib'), filename: 'uamodeler.esm.js', library: { type: 'module' }, chunkFilename: 'uamodeler.[name].esm.js' },
+    output: { path: path.join(__dirname, 'dist/lib'), filename: 'infomodel.esm.js', library: { type: 'module' }, chunkFilename: 'infomodel.[name].esm.js' },
   },
   {
     ...common,
@@ -30,6 +30,6 @@ module.exports = [
       'react-dom': { root: 'ReactDOM', commonjs: 'react-dom', commonjs2: 'react-dom', amd: 'react-dom' },
       'react/jsx-runtime': { root: ['React', 'jsxRuntime'], commonjs: 'react/jsx-runtime', commonjs2: 'react/jsx-runtime', amd: 'react/jsx-runtime' },
     },
-    output: { path: path.join(__dirname, 'dist/lib'), filename: 'uamodeler.umd.js', library: { name: 'UaModeler', type: 'umd' }, globalObject: 'this', chunkFilename: 'uamodeler.[name].umd.js' },
+    output: { path: path.join(__dirname, 'dist/lib'), filename: 'infomodel.umd.js', library: { name: 'InfoModel', type: 'umd' }, globalObject: 'this', chunkFilename: 'infomodel.[name].umd.js' },
   },
 ];

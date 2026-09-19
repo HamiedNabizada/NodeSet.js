@@ -30,7 +30,7 @@ type ElementFactory = {
 };
 type EventBus = { on(event: string, callback: (e: any) => void): void };
 
-export class UaModeler {
+export class InfoModeler {
   readonly diagram: Diagram;
   current?: TypeDiagram;
 
