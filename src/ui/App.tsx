@@ -8,6 +8,7 @@ import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { mayLeaveDrafts } from './drafts';
+import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
 
@@ -39,6 +40,7 @@ export function App() {
   const selectedRef = useRef<string>();
   selectedRef.current = selected;
   const [dirty, setDirty] = useState(false);
+  const [ask, setAsk] = useState<Ask>();
   // The canvas outlives renders; it reaches the current edit function through a ref.
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
@@ -200,23 +202,24 @@ export function App() {
     const modeler = new InfoModeler(canvasRef.current, () => workspace.space, {
       isOwn: key => workspace.editor?.owns(key) ?? false,
       canHoldChildren: key => ['ObjectType', 'VariableType', 'Object', 'Variable'].includes(workspace.space.get(key)?.nodeClass ?? ''),
-      addChild: (key, kind) => {
-        const name = window.prompt(`Name of the new ${kind}`);
-        if (!name) return;
-        runRef.current(() => {
+      addChild: (key, kind) => setAsk({
+        title: `Name of the new ${kind}`,
+        onOk: name => runRef.current(() => {
           const parent = workspace.space.get(key)!;
           const declaration = parent.nodeClass.endsWith('Type') || insideType(workspace.space, parent);
           setSelected(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
-        });
-      },
-      addReference: (source, target) => {
-        const name = window.prompt('ReferenceType of the new reference', lastReferenceType.current);
-        if (!name) return;
-        const type = findReferenceType(workspace, name.trim());
-        if (!type) { setStatus({ text: `There is no ReferenceType named '${name.trim()}'.`, warn: true }); return; }
-        lastReferenceType.current = name.trim();
-        runRef.current(() => workspace.editor!.addReference(source, type, target));
-      },
+        }),
+      }),
+      addReference: (source, target) => setAsk({
+        title: 'ReferenceType of the new reference',
+        value: lastReferenceType.current,
+        options: referenceTypeNames(workspace),
+        check: name => (findReferenceType(workspace, name) ? undefined : `There is no ReferenceType named '${name}'.`),
+        onOk: name => {
+          lastReferenceType.current = name;
+          runRef.current(() => workspace.editor!.addReference(source, findReferenceType(workspace, name)!, target));
+        },
+      }),
       remove: key => runRef.current(() => workspace.editor!.delete(key)),
     });
     modeler.onSelect(key => { if (key) select(key); });
@@ -285,12 +288,14 @@ export function App() {
   }, [workspace, filter, revision]);
 
   const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
-    const name = window.prompt(`Name of the new ${nodeClass}`);
-    if (!name || !workspace?.editor) return;
-    run(() => {
-      const key = workspace.editor!.addType(nodeClass, name);
-      setShown(key);
-      setSelected(key);
+    if (!workspace?.editor) return;
+    setAsk({
+      title: `Name of the new ${nodeClass}`,
+      onOk: name => run(() => {
+        const key = workspace.editor!.addType(nodeClass, name);
+        setShown(key);
+        setSelected(key);
+      }),
     });
   };
 
@@ -397,6 +402,7 @@ export function App() {
         </div>
       )}
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
+      {ask && <AskDialog ask={ask} onClose={() => setAsk(undefined)} />}
     </div>
   );
 }
@@ -406,6 +412,12 @@ function onActivate(e: React.KeyboardEvent, action: () => void): void {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   e.preventDefault();
   action();
+}
+
+/** The names of the ReferenceTypes a new reference may have: the concrete ones. */
+function referenceTypeNames(ws: Workspace): string[] {
+  return [...new Set(ws.space.ofClass('ReferenceType').filter(n => !n.isAbstract).map(n => n.browseName.name))]
+    .sort((a, b) => a.localeCompare(b));
 }
 
 /** A ReferenceType by name, preferring the edited model's own. */

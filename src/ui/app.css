@@ -163,3 +163,11 @@ fieldset.add .row.item-row > label.check { flex: 0 0 auto; }
 .struct-optional { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 4px; padding-top: 3px; }
 fieldset.add .row.struct-row > select { flex: 1; min-width: 0; }
 fieldset.add .row.struct-row > span input[type=checkbox] { margin: 0 4px 0 0; vertical-align: -2px; }
+
+/* The question for a name (AskDialog), in place of window.prompt. */
+.ask-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); display: flex; align-items: flex-start; justify-content: center; z-index: 100; }
+.ask { margin-top: 18vh; min-width: 360px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; gap: 8px; }
+.ask label { font-weight: 600; }
+.ask input { background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px; font: inherit; }
+.ask-problem { color: var(--danger); font-size: 13px; }
+.ask-buttons { display: flex; gap: 6px; justify-content: flex-end; }
