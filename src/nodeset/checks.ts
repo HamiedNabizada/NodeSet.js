@@ -75,7 +75,7 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 }
 
 /** Whether a node is held, directly or through other declarations, by a type. */
-function insideType(space: AddressSpace, n: UaNode): boolean {
+export function insideType(space: AddressSpace, n: UaNode): boolean {
   const seen = new Set<string>();
   for (let p = space.parentOf(n); p && !seen.has(p.id); p = space.parentOf(p)) {
     seen.add(p.id);

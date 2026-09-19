@@ -82,3 +82,21 @@ describe('Instances by ModellingRule', () => {
     expect(ws.editable!.nodes.length).toBe(before);
   });
 });
+
+describe('Optional declarations to choose from', () => {
+  it('lists the Optional paths of the whole type chain, nested ones included', async () => {
+    const { e, centrifugal } = await pumps();
+
+    expect(e.optionalPaths(centrifugal).sort()).toEqual(['Motor/Vibration', 'SerialNumber']);
+  });
+});
+
+describe('Children of instances', () => {
+  it('get no ModellingRule', async () => {
+    const { ws, e, pumpType } = await pumps();
+    const p = e.instantiate(pumpType, 'P-104');
+    const note = e.addDeclaration(p, 'Property', 'Note');
+
+    expect(ws.space.modellingRule(ws.space.get(note)!)).toBeUndefined();
+  });
+});

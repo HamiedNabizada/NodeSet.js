@@ -8,6 +8,7 @@
 // the size of information models.
 
 import { AddressSpace, REF, RULE } from './address-space';
+import { insideType } from './checks';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
@@ -185,7 +186,10 @@ export class ModelEditor {
       d.references.push({ type: refType, isForward: false, target: p.id });
       d.parent = p.id;
       if (kind !== 'Method') d.references.push({ type: REF.HasTypeDefinition, isForward: true, target: TYPE_DEFINITIONS[kind] });
-      d.references.push({ type: REF.HasModellingRule, isForward: true, target: modellingRule });
+      // Only declarations of a type have a ModellingRule; children of instances do not.
+      if (p.nodeClass.endsWith('Type') || insideType(this.space(), p)) {
+        d.references.push({ type: REF.HasModellingRule, isForward: true, target: modellingRule });
+      }
       if (nodeClass === 'Variable') { d.dataType = uaKey(24); d.valueRank = -1; }
       return d.id;
     });
@@ -433,6 +437,27 @@ export class ModelEditor {
       }
       return root.id;
     });
+  }
+
+  /** The paths of the Optional declarations an instance of the type can get, as `instantiate` takes them. */
+  optionalPaths(type: string): string[] {
+    const space = this.space();
+    const paths: string[] = [];
+    const walk = (declarations: Map<string, { node: UaNode; refType: string }>, path: string, depth: number) => {
+      if (depth > 20) return;
+      for (const { node: d } of declarations.values()) {
+        const rule = space.modellingRule(d);
+        if (rule !== RULE.Mandatory && rule !== RULE.Optional) continue;
+        const p = path ? `${path}/${d.browseName.name}` : d.browseName.name;
+        if (rule === RULE.Optional) paths.push(p);
+        const typeDefinition = space.typeDefinition(d);
+        const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, { node: UaNode; refType: string }>();
+        for (const own of space.children(d)) inner.set(qualified(own.node), { node: own.node, refType: own.edge.type });
+        walk(inner, p, depth + 1);
+      }
+    };
+    if (space.get(type)) walk(this.declarationsOf(type), '', 0);
+    return paths;
   }
 
   /** The effective declarations of a type: its own and its supertypes', by BrowseName, the most specific winning. */
