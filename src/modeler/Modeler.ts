@@ -11,6 +11,7 @@ import 'diagram-js/assets/diagram-js.css';
 import { AddressSpace } from '../nodeset/address-space';
 import { buildTypeDiagram, Diagram as TypeDiagram, TypeDiagramOptions } from './diagram-model';
 import UaRenderer from './UaRenderer';
+import { CanvasActions, canvasEditingModule } from './CanvasEditing';
 
 const RendererModule = {
   __init__: ['uaRenderer'],
@@ -33,11 +34,15 @@ export class UaModeler {
   readonly diagram: Diagram;
   current?: TypeDiagram;
 
-  /** @param space the current address space; the workspace replaces it after every change */
-  constructor(container: HTMLElement, private readonly space: () => AddressSpace) {
+  /**
+   * @param space the current address space; the workspace replaces it after every change
+   * @param actions editing on the canvas; without them the canvas only shows
+   */
+  constructor(container: HTMLElement, private readonly space: () => AddressSpace, actions?: CanvasActions) {
     this.diagram = new Diagram({
       canvas: { container },
-      modules: [RendererModule, SelectionModule, OutlineModule, ModelingModule, MoveModule, MoveCanvasModule, ZoomScrollModule],
+      modules: [RendererModule, SelectionModule, OutlineModule, ModelingModule, MoveModule, MoveCanvasModule, ZoomScrollModule,
+        ...(actions ? [canvasEditingModule(actions)] : [])],
     });
   }
 
