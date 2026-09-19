@@ -1,9 +1,11 @@
 // What the modeler has open: one editable NodeSet and the models it
 // requires, taken from what is already loaded, the bundled NodeSets, or
-// files the user adds.
+// files the user adds. The address space is rebuilt after every change to
+// the editable file.
 
 import { AddressSpace } from './nodeset/address-space';
 import { isBundled, loadBundled } from './nodeset/bundled';
+import { ModelEditor, newModel } from './nodeset/edit';
 import { NodeSetFile, UA_NAMESPACE } from './nodeset/model';
 import { readNodeSet } from './nodeset/reader';
 import { writeNodeSet } from './nodeset/writer';
@@ -16,18 +18,31 @@ export interface OpenResult {
 
 export class Workspace {
   space = new AddressSpace();
-  editable?: NodeSetFile;
-  private readonly loaded = new Map<string, NodeSetFile>();
+  editor?: ModelEditor;
+  /** Required models, in load order. */
+  private readonly dependencies: NodeSetFile[] = [];
+  private readonly loaded = new Set<string>();
+
+  get editable(): NodeSetFile | undefined {
+    return this.editor?.file;
+  }
 
   /** Opens a NodeSet for editing, with everything it requires that can be found. */
   async open(xml: string): Promise<OpenResult> {
-    const file = readNodeSet(xml);
-    this.space = new AddressSpace();
+    return this.start(readNodeSet(xml));
+  }
+
+  /** Starts a new, empty model. */
+  async create(modelUri: string): Promise<OpenResult> {
+    return this.start(newModel(modelUri));
+  }
+
+  private async start(file: NodeSetFile): Promise<OpenResult> {
+    this.dependencies.length = 0;
     this.loaded.clear();
     const missing = await this.require(file, new Set());
-    this.space.load(file, true);
-    for (const m of file.models) this.loaded.set(m.modelUri, file);
-    this.editable = file;
+    this.editor = new ModelEditor(file, () => this.space, f => this.rebuild(f));
+    this.rebuild(file);
     return { file, missing };
   }
 
@@ -35,13 +50,21 @@ export class Workspace {
   async addRequired(xml: string): Promise<string[]> {
     const file = readNodeSet(xml);
     const missing = await this.require(file, new Set());
-    this.space.load(file);
-    for (const m of file.models) this.loaded.set(m.modelUri, file);
-    if (this.editable) {
-      // Keep the editable file on top: it may override nodes of what it requires.
-      this.space.load(this.editable, true);
-    }
+    this.add(file);
+    if (this.editable) this.rebuild(this.editable);
     return missing;
+  }
+
+  private add(file: NodeSetFile) {
+    this.dependencies.push(file);
+    for (const m of file.models) this.loaded.add(m.modelUri);
+  }
+
+  private rebuild(editable: NodeSetFile) {
+    const space = new AddressSpace();
+    for (const d of this.dependencies) space.load(d);
+    space.load(editable, true);
+    this.space = space;
   }
 
   private async require(file: NodeSetFile, visiting: Set<string>): Promise<string[]> {
@@ -53,8 +76,7 @@ export class Workspace {
       visiting.add(uri);
       const dependency = await loadBundled(uri);
       missing.push(...await this.require(dependency, visiting));
-      this.space.load(dependency);
-      for (const m of dependency.models) this.loaded.set(m.modelUri, dependency);
+      this.add(dependency);
     }
     return [...new Set(missing)];
   }
