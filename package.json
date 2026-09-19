@@ -8,10 +8,12 @@
   "type": "commonjs",
   "scripts": {
     "dev": "webpack serve --config webpack.config.js --mode development",
-    "build": "webpack --config webpack.config.js --mode production",
+    "build": "npm run build:web && npm run build:lib",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:web": "webpack --config webpack.config.js --mode production",
+    "build:lib": "webpack --config webpack.lib.config.js --mode production && tsc -p tsconfig.lib.json"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
@@ -39,5 +41,18 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tiny-svg": "^4.1.4"
+  },
+  "main": "dist/lib/uamodeler.umd.js",
+  "module": "dist/lib/uamodeler.esm.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist/lib",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
   }
 }

@@ -34,3 +34,22 @@ OPC Foundation MIT License 1.00.
 ## License
 
 MIT
+
+## As a library
+
+```bash
+npm run build       # dist/web (the app) and dist/lib (the library)
+```
+
+```ts
+import { readNodeSet, writeNodeSet, Workspace, UaModeler, App } from 'uamodeler-js';
+
+const ws = new Workspace();
+await ws.open(xml);                         // loads the required UA and DI models
+const pump = ws.editor!.addType('ObjectType', 'PumpType');
+ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
+const nodeSet = ws.save();                  // NodeSet2 XML
+```
+
+`App` is the complete modeler as a React component; `UaModeler` is the canvas
+alone. React 18 is a peer dependency.
