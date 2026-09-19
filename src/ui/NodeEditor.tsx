@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressSpace, RULE } from '../nodeset/address-space';
 import { DeclarationKind, ModelEditor } from '../nodeset/edit';
 import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
+import { ArgumentsSection, FieldsSection, ReferencesSection } from './Sections';
 
 const RULES: [string, string][] = [
   ['', '(none)'],
@@ -99,7 +100,10 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated 
           )}
         </>
       )}
+      {own && node.nodeClass === 'Method' && <ArgumentsSection space={space} editor={editor} method={node} run={run} />}
+      {own && node.nodeClass === 'DataType' && <FieldsSection space={space} editor={editor} dataType={node} run={run} />}
       {own && canHoldChildren(node.nodeClass) && <AddChild editor={editor} parent={nodeKey} run={run} onCreated={onCreated} />}
+      {own && <ReferencesSection space={space} editor={editor} node={node} run={run} />}
       {own && (
         <div className="actions">
           {isType && <button onClick={() => onOpenType(nodeKey)}>Show diagram</button>}
@@ -162,8 +166,8 @@ function TextInput({ value, disabled, multiline, onCommit }: { value: string; di
 }
 
 /** Picks a node of one NodeClass by name; names that occur in several models carry their namespace. */
-export function TypePicker({ space, nodeClass, value, disabled, onPick }: {
-  space: AddressSpace; nodeClass: NodeClass; value?: string; disabled?: boolean; onPick: (key: string) => void;
+export function TypePicker({ space, nodeClass, value, disabled, onPick, placeholder }: {
+  space: AddressSpace; nodeClass: NodeClass; value?: string; disabled?: boolean; onPick: (key: string) => void; placeholder?: string;
 }) {
   const options = useMemo(() => {
     const nodes = space.ofClass(nodeClass);
@@ -184,7 +188,7 @@ export function TypePicker({ space, nodeClass, value, disabled, onPick }: {
   };
   return (
     <>
-      <input list={listId} value={draft} disabled={disabled} onChange={e => setDraft(e.target.value)} onBlur={commit}
+      <input list={listId} value={draft} disabled={disabled} placeholder={placeholder} onChange={e => setDraft(e.target.value)} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') commit(); }} />
       <datalist id={listId}>{options.map(o => <option key={o.key} value={o.name} />)}</datalist>
     </>

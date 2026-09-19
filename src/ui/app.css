@@ -65,3 +65,17 @@ fieldset.add .row input { flex: 1; min-width: 0; }
 .finding.error .rule { color: #cf222e; }
 .finding.warning .rule { color: #9a6700; }
 .finding .rule { font-family: Consolas, monospace; margin-right: 6px; }
+fieldset.add .row button { padding: 2px 8px; }
+fieldset.add .row .mono { padding: 4px 2px 0; min-width: 14px; }
+fieldset.add .row input[list] { min-width: 0; flex: 1.2; }
+fieldset.add .note { color: var(--muted); font-size: 12px; }
+fieldset.add .row.ref span { flex: 1; padding-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+fieldset.add > input[list] { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
+.side.right { overflow-y: auto; }
+fieldset.add .row.item-row { flex-wrap: wrap; padding-bottom: 4px; border-bottom: 1px dashed #eaeef2; }
+fieldset.add .row.item-row > input:first-child { flex: 1 1 100%; }
+fieldset.add .row.item-row > input[list] { flex: 1 1 0; }
+fieldset.add .row.item-row > select { flex: 0 0 auto; }
+fieldset.add > input[list] { width: 100%; box-sizing: border-box; }
+fieldset.add .row > select { min-width: 0; flex: 1; }
+fieldset.add { min-width: 0; }
