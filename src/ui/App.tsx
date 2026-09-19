@@ -6,6 +6,7 @@ import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
+import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
 
 const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType'; title: string }[] = [
@@ -256,6 +257,7 @@ export function App() {
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">Undo</button>
         <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">Redo</button>
         {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>Reset layout</button>}
+        <button disabled={!workspace?.editable} onClick={() => setSelected(undefined)} title="Version, date and the models in use">Model</button>
         <span className="sep" />
         <button className={errors > 0 ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
           Checks: {errors} error(s), {findings.length - errors} warning(s)
@@ -307,7 +309,9 @@ export function App() {
             ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
                 onOpenType={key => { setShown(key); setSelected(key); }} onCreated={key => setSelected(key)}
                 onInstance={key => { setShown(key); setSelected(key); }} />
-            : <div className="empty">Select a node.</div>}
+            : workspace?.editable
+              ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
+              : <div className="empty">Select a node.</div>}
         </div>
       </div>
       {showFindings && (
