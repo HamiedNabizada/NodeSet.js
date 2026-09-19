@@ -4,17 +4,23 @@
 //
 // The host sends a NodeSet to edit, with the NodeSets it requires, or asks for
 // a new model; the modeler answers "ready" once it listens, and sends the
-// NodeSet back when the user applies it. "theme" tells the modeler whether the
-// host is light or dark.
+// NodeSet back when the user applies it, and the host answers "applied" once
+// the import ran, so the model counts as unchanged only when it arrived.
+// "save" asks the host to write the NodeSet to a file of the user's choice,
+// answered by "saved". "theme" tells the modeler whether the host is light or
+// dark.
 
 export type HostToModeler =
   | { type: 'open'; name: string; xml: string; required?: string[] }
   | { type: 'new'; modelUri: string; required?: string[] }
-  | { type: 'theme'; dark: boolean };
+  | { type: 'theme'; dark: boolean }
+  | { type: 'applied'; ok: boolean; text: string }
+  | { type: 'saved'; ok: boolean; text: string };
 
 export type ModelerToHost =
   | { type: 'ready'; version: string }
   | { type: 'apply'; xml: string; modelUri: string }
+  | { type: 'save'; xml: string; name: string }
   | { type: 'dirty'; dirty: boolean }
   | { type: 'status'; text: string; warn?: boolean };
 

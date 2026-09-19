@@ -7,6 +7,7 @@ import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
+import { mayLeaveDrafts } from './drafts';
 import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
 
@@ -68,26 +69,32 @@ export function App() {
     }
   }, [bump]);
 
+  /** True when nothing unsaved would be lost, or the user agrees to lose it. */
+  const mayDiscard = useCallback(
+    () => (!dirty || window.confirm('The model has changes that are not saved. Discard them?')) && mayLeaveDrafts(),
+    [dirty]);
+
   const openFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (file) {
+    if (file && mayDiscard()) {
       const xml = await file.text();
       await start(ws => ws.open(xml), file.name);
     }
-  }, [start]);
+  }, [start, mayDiscard]);
 
   const openSample = useCallback(async () => {
+    if (!mayDiscard()) return;
     const di = await import(/* webpackChunkName: "nodeset-di" */ '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml');
     await start(ws => ws.open(di.default), 'Opc.Ua.Di.NodeSet2.xml');
-  }, [start]);
+  }, [start, mayDiscard]);
 
   const createModel = useCallback(async () => {
     const uri = newModelUri?.trim();
-    if (!uri) return;
+    if (!uri || !mayDiscard()) return;
     setNewModelUri(undefined);
     await start(ws => ws.create(uri), uri);
-  }, [newModelUri, start]);
+  }, [newModelUri, start, mayDiscard]);
 
   /** Runs an edit; an EditError becomes the status line instead of an exception. */
   const run = useCallback((action: () => unknown) => {
@@ -103,14 +110,30 @@ export function App() {
 
   runRef.current = run;
 
-  const undo = useCallback(() => { workspace?.editor?.undo(); changed(); }, [workspace, changed]);
-  const redo = useCallback(() => { workspace?.editor?.redo(); changed(); }, [workspace, changed]);
+  // Only a step that happened changes the model.
+  const undo = useCallback(() => {
+    if (!workspace?.editor?.canUndo) return;
+    workspace.editor.undo();
+    changed();
+  }, [workspace, changed]);
+  const redo = useCallback(() => {
+    if (!workspace?.editor?.canRedo) return;
+    workspace.editor.redo();
+    changed();
+  }, [workspace, changed]);
 
+  /** Another node, once its unapplied drafts may go. */
+  const select = useCallback((key: string | undefined, show?: string) => {
+    if (!mayLeaveDrafts()) return;
+    if (show !== undefined) setShown(show);
+    setSelected(key);
+  }, []);
+
+  // The model counts as unchanged once the host reports it imported ("applied").
   const apply = useCallback(() => {
-    if (!host || !workspace?.editable) return;
+    if (!host || !workspace?.editable || !mayLeaveDrafts()) return;
     host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '' });
-    setDirty(false);
-    setStatus({ text: 'Sent to the document.' });
+    setStatus({ text: 'Applying to the document …' });
   }, [host, workspace]);
 
   // Messages from the host, and "ready" once the modeler listens.
@@ -120,26 +143,44 @@ export function App() {
       if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
       if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
       if (m.type === 'theme') applyTheme(m.dark);
+      if (m.type === 'applied' || m.type === 'saved') {
+        if (m.ok) setDirty(false);
+        setStatus({ text: m.text, warn: !m.ok });
+      }
     });
     host.post({ type: 'ready', version: '0.1.0' });
     return stop;
   }, [host, start]);
 
   useEffect(() => { host?.post({ type: 'dirty', dirty }); }, [host, dirty]);
+
+  // On its own in a browser, closing or reloading the page asks while changes are unsaved.
+  useEffect(() => {
+    if (host || !dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [host, dirty]);
   useEffect(() => { host?.post({ type: 'status', text: status.text, warn: status.warn }); }, [host, status]);
 
   const save = useCallback(() => {
-    if (!workspace?.editable) return;
+    if (!workspace?.editable || !mayLeaveDrafts()) return;
+    const model = workspace.editable.models[0]?.modelUri ?? 'Model';
+    const name = `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
+    // Inside a desktop host a save dialog of the host, not a browser download.
+    if (host) {
+      host.post({ type: 'save', xml: workspace.save(), name });
+      return;
+    }
     const blob = new Blob([workspace.save()], { type: 'application/xml' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    const model = workspace.editable.models[0]?.modelUri ?? 'Model';
-    a.download = `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
     setDirty(false);
     setStatus({ text: `Saved ${a.download}.` });
-  }, [workspace]);
+  }, [workspace, host]);
 
   // Undo and redo from the keyboard, except while typing.
   useEffect(() => {
@@ -178,8 +219,9 @@ export function App() {
       },
       remove: key => runRef.current(() => workspace.editor!.delete(key)),
     });
-    modeler.onSelect(key => { if (key) setSelected(key); });
+    modeler.onSelect(key => { if (key) select(key); });
     modeler.onOpen(key => {
+      if (!mayLeaveDrafts()) return;
       const node = workspace.space.get(key);
       if (node?.nodeClass.endsWith('Type')) setShown(key);
       else { const t = node && workspace.space.typeDefinition(node); if (t) setShown(t.id); }
@@ -192,7 +234,7 @@ export function App() {
     });
     modelerRef.current = modeler;
     return () => { modeler.destroy(); modelerRef.current = undefined; };
-  }, [workspace, changed]);
+  }, [workspace, changed, select]);
 
   // Redraw after every change; fit only when another type is shown.
   useEffect(() => {
@@ -256,8 +298,7 @@ export function App() {
     if (!workspace) return;
     let owner = workspace.space.get(f.node);
     for (let i = 0; owner && !owner.nodeClass.endsWith('Type') && i < 50; i++) owner = workspace.space.parentOf(owner);
-    if (owner) setShown(owner.id);
-    setSelected(f.node);
+    select(f.node, owner?.id);
   };
 
   const editor = workspace?.editor;
@@ -266,8 +307,9 @@ export function App() {
   return (
     <div className="app">
       <div className="toolbar">
-        <span className="title">InfoModel.js</span>
-        {newModelUri === undefined
+        {!host && <span className="title">InfoModel.js</span>}
+        {/* Inside the plugin, its own toolbar opens and starts models: they need its NodeSet folders. */}
+        {host ? null : newModelUri === undefined
           ? <button onClick={() => setNewModelUri('http://example.org/MyModel/')}>New model…</button>
           : (
             <span className="inline-form">
@@ -277,7 +319,7 @@ export function App() {
               <button onClick={() => setNewModelUri(undefined)}>Cancel</button>
             </span>
           )}
-        <label className="button">Open NodeSet…<input type="file" accept=".xml" onChange={openFile} /></label>
+        {!host && <label className="button">Open NodeSet…<input type="file" accept=".xml" onChange={openFile} /></label>}
         {!host && <button onClick={openSample}>Open DI sample</button>}
         {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>Apply to document</button>}
         <button onClick={save} disabled={!workspace?.editable}>Save NodeSet{dirty ? ' *' : ''}</button>
@@ -285,7 +327,7 @@ export function App() {
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">Undo</button>
         <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">Redo</button>
         {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>Reset layout</button>}
-        <button disabled={!workspace?.editable} onClick={() => setSelected(undefined)} title="Version, date and the models in use">Model</button>
+        <button disabled={!workspace?.editable} onClick={() => select(undefined)} title="Version, date and the models in use">Model</button>
         <span className="sep" />
         <button className={errors > 0 ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
           Checks: {errors} error(s), {findings.length - errors} warning(s)
@@ -308,7 +350,8 @@ export function App() {
                   key={n.id}
                   className={`item${n.id === shown ? ' active' : ''}${g.own.has(n.browseName.namespaceUri) ? '' : ' external'}`}
                   title={n.id}
-                  onClick={() => { setShown(n.id); setSelected(n.id); }}
+                  role="button" tabIndex={0}
+                  onClick={() => select(n.id, n.id)} onKeyDown={e => onActivate(e, () => select(n.id, n.id))}
                 >
                   {n.isAbstract ? <em>{label(n)}</em> : label(n)}
                 </div>
@@ -319,8 +362,8 @@ export function App() {
             <div>
               <div className="group">Instances ({instances.length})</div>
               {instances.map(n => (
-                <div key={n.id} className={`item${n.id === shown ? ' active' : ''}`} title={n.id}
-                  onClick={() => { setShown(n.id); setSelected(n.id); }}>
+                <div key={n.id} className={`item${n.id === shown ? ' active' : ''}`} title={n.id} role="button" tabIndex={0}
+                  onClick={() => select(n.id, n.id)} onKeyDown={e => onActivate(e, () => select(n.id, n.id))}>
                   {label(n)} <span className="type-hint">{typeName(workspace, n)}</span>
                 </div>
               ))}
@@ -335,8 +378,8 @@ export function App() {
         <div className="side right">
           {workspace && editor && selected && workspace.space.get(selected)
             ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
-                onOpenType={key => { setShown(key); setSelected(key); }} onCreated={key => setSelected(key)}
-                onInstance={key => { setShown(key); setSelected(key); }} />
+                onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
+                onInstance={key => select(key, key)} />
             : workspace?.editable
               ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
               : <div className="empty">Select a node.</div>}
@@ -346,8 +389,9 @@ export function App() {
         <div className="findings">
           {findings.length === 0 && <div className="empty">No findings.</div>}
           {findings.map((f, i) => (
-            <div key={i} className={`finding ${f.severity}`} onClick={() => goTo(f)}>
-              <span className="rule">{f.rule}</span> {f.message}
+            <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
+              onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>
+              <span className="severity">{f.severity}</span> <span className="rule">{f.rule}</span> {f.message}
             </div>
           ))}
         </div>
@@ -355,6 +399,13 @@ export function App() {
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
     </div>
   );
+}
+
+/** Enter or Space on a list entry does what a click does. */
+function onActivate(e: React.KeyboardEvent, action: () => void): void {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  action();
 }
 
 /** A ReferenceType by name, preferring the edited model's own. */

@@ -4,6 +4,7 @@
 // and applied as one undo step.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useDraft } from './drafts';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
 import { Argument, text, uaKey, UaNode } from '../nodeset/model';
@@ -31,6 +32,7 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   const currentKey = JSON.stringify(current);
   useEffect(() => setDraft(current), [currentKey]);
   const changed = JSON.stringify(draft) !== currentKey;
+  useDraft(`${which} arguments`, changed);
   const update = (i: number, patch: Partial<Argument>) => setDraft(d => d.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
   return (
@@ -81,6 +83,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   if (!kind) return null;
   const [legend, noun] = FIELD_LEGENDS[kind];
   const changed = fieldsKey(draft) !== currentKey;
+  useDraft('Fields', changed);
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
 
   return (
@@ -135,6 +138,7 @@ export function StructureValueSection({ space, editor, node, shape, current, own
   const [draft, setDraft] = useState<StructValue[]>(JSON.parse(currentJson));
   useEffect(() => setDraft(JSON.parse(currentJson)), [currentJson]);
   const changed = JSON.stringify(draft) !== currentJson;
+  useDraft('Value', changed);
   const set = (i: number, v: StructValue) => setDraft(d => d.map((x, j) => (j === i ? v : x)));
 
   return (
