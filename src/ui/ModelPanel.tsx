@@ -55,7 +55,7 @@ export function ModelPanel({ workspace, run, onLoaded }: {
         <legend>Models in use</legend>
         {loaded.map(m => (
           <div key={m.modelUri} className="row ref">
-            <span title={m.modelUri}>{m.modelUri} <em>{m.version}</em></span>
+            <span title={m.modelUri}>{shortName(m.modelUri)} <em>{m.version}</em></span>
             {declared.has(m.modelUri) ? <span className="note">required</span> : <span className="note">loaded</span>}
           </div>
         ))}
@@ -65,4 +65,11 @@ export function ModelPanel({ workspace, run, onLoaded }: {
       </fieldset>
     </div>
   );
+}
+
+/** "UA", "DI", "Machinery" for OPC Foundation models; other URIs as they are. */
+function shortName(uri: string): string {
+  const opcf = 'http://opcfoundation.org/UA/';
+  if (uri === opcf) return 'UA';
+  return uri.startsWith(opcf) ? uri.slice(opcf.length).replace(/\/$/, '') : uri;
 }
