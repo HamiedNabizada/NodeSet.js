@@ -29,6 +29,8 @@ export const TYPE_DEFINITIONS = {
 
 export type DeclarationKind = 'Object' | 'Variable' | 'Property' | 'Method';
 
+export interface FieldInput { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }
+
 /** What the fields of a DataType's definition describe. */
 export type FieldKind = 'enumeration' | 'optionSet' | 'union' | 'structure';
 
@@ -265,8 +267,41 @@ export class ModelEditor {
       for (const other of this.file.nodes) {
         other.references = other.references.filter(r => !(r.type === REF.HasSubtype && r.isForward && r.target === key));
       }
+      const kindBefore = n.nodeClass === 'DataType' ? fieldKind(this.space(), key) : undefined;
       this.replaceSingle(n, REF.HasSubtype, false, supertype);
+      if (n.nodeClass === 'DataType') this.fitDataType(n, kindBefore, supertype);
     });
+  }
+
+  /**
+   * After a DataType got another supertype: encodings only for structures,
+   * and fields that fit what the DataType now is. Fields carry over between
+   * structures and unions, and between enumerations and OptionSets; otherwise
+   * they are removed, with the properties that named them.
+   * The address space still has the old supertype, so the new one decides.
+   */
+  private fitDataType(d: UaNode, before: FieldKind | undefined, supertype: string) {
+    const space = this.space();
+    const after = fieldKind(space, supertype);
+    if (space.isSubtypeOf(supertype, STRUCTURE)) {
+      this.ensureEncodings(d);
+    } else {
+      const encodings = d.references.filter(r => r.type === HAS_ENCODING && r.isForward && this.owns(r.target)).map(r => r.target);
+      this.removeNodes(new Set(encodings));
+      d.references = d.references.filter(r => r.type !== HAS_ENCODING);
+    }
+    if (before === after || !d.definition) return;
+    const numbered = (k: FieldKind | undefined) => k === 'enumeration' || k === 'optionSet';
+    const standard = ['EnumStrings', 'EnumValues', 'OptionSetValues'];
+    const doomed = space.children(d).filter(c => standard.includes(c.node.browseName.name) && c.node.browseName.namespaceUri === UA_NAMESPACE && this.owns(c.node.id));
+    this.removeNodes(new Set(doomed.map(c => c.node.id)));
+    if (after && numbered(before) === numbered(after)) {
+      this.writeFields(d, d.definition.fields.map(f => ({
+        name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: after === 'union' ? undefined : f.isOptional, description: text(f.description), value: f.value,
+      })), supertype);
+    } else {
+      d.definition = undefined;
+    }
   }
 
   setTypeDefinition(key: string, type: string): void {
@@ -370,55 +405,60 @@ export class ModelEditor {
    * - a structure has typed fields, some of which may be optional.
    * Structures, unions and OptionSet structures get their encodings.
    */
-  setFields(dataType: string, fields: { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }[]): void {
+  setFields(dataType: string, fields: FieldInput[]): void {
     this.change(() => {
       const d = this.node(dataType);
       if (d.nodeClass !== 'DataType') throw new EditError('Only a DataType has fields.');
-      const space = this.space();
-      const kind = fieldKind(space, d.id);
-      if (!kind) {
-        throw new EditError('Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).');
-      }
-      const numbered = kind === 'enumeration' || kind === 'optionSet';
-      const names = new Set<string>();
-      for (const f of fields) {
-        if (!f.name.trim()) throw new EditError('Every field needs a name.');
-        if (names.has(f.name.trim())) throw new EditError(`Two fields are named '${f.name.trim()}'.`);
-        names.add(f.name.trim());
-        if (!numbered && space.get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
-        if (kind === 'union' && f.isOptional) throw new EditError('The fields of a union are not optional; exactly one of them is set.');
-      }
-      if (numbered) {
-        const values = fields.map((f, i) => f.value ?? i);
-        const what = kind === 'enumeration' ? 'Enumeration values' : 'Bits';
-        if (values.some(v => !Number.isInteger(v))) throw new EditError(`${what} are integers.`);
-        if (new Set(values).size !== values.length) throw new EditError(`Two ${kind === 'enumeration' ? 'enumeration values' : 'options'} are the same.`);
-        const bits = kind === 'optionSet' ? optionBits(space, d.id) : undefined;
-        if (kind === 'optionSet' && values.some(v => v < 0 || (bits !== undefined && v >= bits))) {
-          throw new EditError(`Bits of '${d.browseName.name}' are 0 to ${(bits ?? 1) - 1}.`);
-        }
-      }
-      const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
-      d.definition = {
-        name: d.browseName,
-        otherAttributes: {
-          ...otherAttributes,
-          ...(kind === 'union' ? { IsUnion: 'true' } : {}),
-          ...(kind === 'optionSet' ? { IsOptionSet: 'true' } : {}),
-        },
-        fields: fields.map((f, i) => ({
-          name: f.name.trim(),
-          ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
-          description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
-          displayName: [],
-          otherAttributes: {},
-        })),
-      };
-      const entries = d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) }));
-      if (kind === 'enumeration') this.setEnumProperties(d, entries);
-      if (kind === 'optionSet') this.setOptionSetValues(d, entries);
-      if (space.isSubtypeOf(d.id, STRUCTURE)) this.ensureEncodings(d);
+      this.writeFields(d, fields, d.id);
     });
+  }
+
+  /** The fields of a DataType, whose kind the given type (itself or its new supertype) decides. */
+  private writeFields(d: UaNode, fields: FieldInput[], kindOf: string) {
+    const space = this.space();
+    const kind = fieldKind(space, kindOf);
+    if (!kind) {
+      throw new EditError('Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).');
+    }
+    const numbered = kind === 'enumeration' || kind === 'optionSet';
+    const names = new Set<string>();
+    for (const f of fields) {
+      if (!f.name.trim()) throw new EditError('Every field needs a name.');
+      if (names.has(f.name.trim())) throw new EditError(`Two fields are named '${f.name.trim()}'.`);
+      names.add(f.name.trim());
+      if (!numbered && space.get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
+      if (kind === 'union' && f.isOptional) throw new EditError('The fields of a union are not optional; exactly one of them is set.');
+    }
+    if (numbered) {
+      const values = fields.map((f, i) => f.value ?? i);
+      const what = kind === 'enumeration' ? 'Enumeration values' : 'Bits';
+      if (values.some(v => !Number.isInteger(v))) throw new EditError(`${what} are integers.`);
+      if (new Set(values).size !== values.length) throw new EditError(`Two ${kind === 'enumeration' ? 'enumeration values' : 'options'} are the same.`);
+      const bits = kind === 'optionSet' ? optionBits(space, kindOf) : undefined;
+      if (kind === 'optionSet' && values.some(v => v < 0 || (bits !== undefined && v >= bits))) {
+        throw new EditError(`Bits of '${d.browseName.name}' are 0 to ${(bits ?? 1) - 1}.`);
+      }
+    }
+    const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
+    d.definition = {
+      name: d.browseName,
+      otherAttributes: {
+        ...otherAttributes,
+        ...(kind === 'union' ? { IsUnion: 'true' } : {}),
+        ...(kind === 'optionSet' ? { IsOptionSet: 'true' } : {}),
+      },
+      fields: fields.map((f, i) => ({
+        name: f.name.trim(),
+        ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
+        description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
+        displayName: [],
+        otherAttributes: {},
+      })),
+    };
+    const entries = d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) }));
+    if (kind === 'enumeration') this.setEnumProperties(d, entries);
+    if (kind === 'optionSet') this.setOptionSetValues(d, entries);
+    if (space.isSubtypeOf(kindOf, STRUCTURE)) this.ensureEncodings(d);
   }
 
   /**

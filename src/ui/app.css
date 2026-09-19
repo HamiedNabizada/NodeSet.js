@@ -90,6 +90,8 @@ label.button-like { display: inline-block; padding: 3px 10px; border: 1px solid 
 label.button-like input[type=file] { display: none; }
 fieldset.add > button { justify-self: start; }
 fieldset.add .row input.value { flex: 0 0 64px; }
+fieldset.add .row.struct-row > span { flex: 0 0 38%; padding-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+fieldset.add .row.item-row > label.check { flex: 0 0 auto; }
 .djs-context-pad .entry.ua-pad { width: 22px; height: 22px; line-height: 22px; text-align: center; font: 600 12px 'Segoe UI', Arial, sans-serif;
   background: #fff; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
 .djs-context-pad .entry.ua-pad:hover { background: #ddf4ff; border-color: var(--accent); }

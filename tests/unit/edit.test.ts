@@ -213,3 +213,39 @@ describe('OptionSets and unions', () => {
     expect(d.definition!.otherAttributes.IsUnion).toBeUndefined();
   });
 });
+
+describe('Changing the supertype of a DataType', () => {
+  it('turns a new structure into an OptionSet and back, fitting encodings and fields', async () => {
+    const { ws, editor } = await pumpModel();
+    const flags = editor.addType('DataType', 'PumpFlags');
+    expect(ws.space.out(flags, uaKey(38), false)).toHaveLength(3);
+
+    editor.setSupertype(flags, uaKey(7)); // UInt32
+    expect(ws.space.out(flags, uaKey(38), false)).toEqual([]);
+    expect(ws.editable!.nodes.some(n => n.browseName.name === 'Default XML')).toBe(false);
+    editor.setFields(flags, [{ name: 'Running' }, { name: 'Fault' }]);
+    expect(ws.space.get(flags)!.definition!.otherAttributes.IsOptionSet).toBe('true');
+
+    // Enumeration and OptionSet are both named values: the names carry over.
+    editor.setSupertype(flags, uaKey(29));
+    const children = () => ws.space.children(ws.space.get(flags)!).map(c => c.node.browseName.name);
+    expect(children()).toEqual(['EnumStrings']);
+    expect(ws.space.get(flags)!.definition!.otherAttributes.IsOptionSet).toBeUndefined();
+
+    // A structure has typed fields: the named values go, the encodings come.
+    editor.setSupertype(flags, uaKey(22));
+    expect(ws.space.get(flags)!.definition).toBeUndefined();
+    expect(children()).toEqual([]);
+    expect(ws.space.out(flags, uaKey(38), false)).toHaveLength(3);
+  });
+
+  it('turns a structure into a union, keeping its fields', async () => {
+    const { ws, editor } = await pumpModel();
+    const s = editor.addType('DataType', 'Setpoint');
+    editor.setFields(s, [{ name: 'Speed', dataType: uaKey(11) }, { name: 'Flow', dataType: uaKey(11), isOptional: true }]);
+    editor.setSupertype(s, uaKey(12756));
+    const d = ws.space.get(s)!.definition!;
+    expect(d.otherAttributes.IsUnion).toBe('true');
+    expect(d.fields.map(f => [f.name, f.isOptional])).toEqual([['Speed', undefined], ['Flow', undefined]]);
+  });
+});

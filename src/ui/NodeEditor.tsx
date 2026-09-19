@@ -6,8 +6,8 @@ import { AddressSpace, RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { DeclarationKind, ModelEditor } from '../nodeset/edit';
 import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
-import { builtInOf, valueText } from '../nodeset/values';
-import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection } from './Sections';
+import { builtInOf, structureOf, structureText, valueText } from '../nodeset/values';
+import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StructureValueSection } from './Sections';
 
 const RULES: [string, string][] = [
   ['', '(none)'],
@@ -124,16 +124,26 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
   );
 }
 
-/** The value as text: a scalar, or array elements separated by ";". Structured values are shown, not edited. */
+/**
+ * The value as text: a scalar, or array elements separated by ";"; a single
+ * structure of built-in fields field by field. Other structured values are
+ * shown, not edited.
+ */
 function ValueField({ space, editor, node, own, run }: { space: AddressSpace; editor: ModelEditor; node: UaNode; own: boolean; run: Props['run'] }) {
   const builtIn = builtInOf(space, node.dataType);
-  const current = valueText(node, builtIn);
   const array = (node.valueRank ?? -1) >= 0;
+  const shape = !builtIn && !array ? structureOf(space, node.dataType) : undefined;
+  const fields = shape ? structureText(node, shape) : null;
+  if (shape && fields !== null) {
+    return <StructureValueSection editor={editor} node={node} shape={shape} current={fields} own={own} run={run} />;
+  }
+  const current = node.extensionObjects ? null : valueText(node, builtIn);
+  const hint = !node.dataType ? 'choose a DataType first' : 'values of this DataType are not edited here';
   return (
     <Field label="Value">
       {current === null
         ? <span className="note">A structured value; kept as it was read.</span>
-        : <TextInput value={current ?? ''} disabled={!own || !builtIn} placeholder={!builtIn ? 'choose a DataType first' : array ? 'a; b; c' : builtIn}
+        : <TextInput value={current ?? ''} disabled={!own || !builtIn} placeholder={!builtIn ? hint : array ? 'a; b; c' : builtIn}
             onCommit={v => run(() => editor.setValue(node.id, v))} />}
     </Field>
   );

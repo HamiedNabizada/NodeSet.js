@@ -1,11 +1,13 @@
 // Panel sections for what has more structure than a field: method
-// arguments, DataType fields, and references outside the hierarchy.
-// Arguments and fields are edited as a draft and applied as one undo step.
+// arguments, DataType fields, structure values, and references outside the
+// hierarchy. Arguments, fields and structure values are edited as a draft
+// and applied as one undo step.
 
 import { useEffect, useMemo, useState } from 'react';
 import { AddressSpace, REF } from '../nodeset/address-space';
-import { ModelEditor } from '../nodeset/edit';
+import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
 import { Argument, text, uaKey, UaNode } from '../nodeset/model';
+import { StructureShape } from '../nodeset/values';
 import { TypePicker } from './NodeEditor';
 
 type Run = (action: () => unknown) => void;
@@ -25,8 +27,10 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   const current = useMemo(() => space.children(method)
     .find(c => c.node.browseName.name === `${which}Arguments`)?.node.arguments ?? [], [space, method, which]);
   const [draft, setDraft] = useState<Argument[]>(current);
-  useEffect(() => setDraft(current), [current]);
-  const changed = JSON.stringify(draft) !== JSON.stringify(current);
+  // Reset the draft when the model changes, not when a failed change rebuilt the same content.
+  const currentKey = JSON.stringify(current);
+  useEffect(() => setDraft(current), [currentKey]);
+  const changed = JSON.stringify(draft) !== currentKey;
   const update = (i: number, patch: Partial<Argument>) => setDraft(d => d.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
   return (
@@ -53,25 +57,39 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
 
 interface FieldDraft { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }
 
+/** Fields compared by content, whatever order their properties were set in. */
+function fieldsKey(fields: FieldDraft[]): string {
+  return JSON.stringify(fields.map(f => [f.name, f.dataType, f.valueRank ?? -1, !!f.isOptional, f.description ?? '', f.value]));
+}
+
+const FIELD_LEGENDS: Record<FieldKind, [string, string]> = {
+  enumeration: ['Values', 'Value'],
+  optionSet: ['Options (bit numbers)', 'Option'],
+  union: ['Fields (exactly one is set)', 'Field'],
+  structure: ['Fields', 'Field'],
+};
+
 export function FieldsSection({ space, editor, dataType, run }: { space: AddressSpace; editor: ModelEditor; dataType: UaNode; run: Run }) {
-  const isEnum = space.isSubtypeOf(dataType.id, uaKey(29));
-  const isStructure = space.isSubtypeOf(dataType.id, uaKey(22));
+  const kind = fieldKind(space, dataType.id);
+  const isEnum = kind === 'enumeration' || kind === 'optionSet';
   const current = useMemo<FieldDraft[]>(() => (dataType.definition?.fields ?? []).map(f => ({
     name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: f.isOptional, description: text(f.description), value: f.value,
-  })), [dataType]);
+  })), [dataType, dataType.definition]);
   const [draft, setDraft] = useState<FieldDraft[]>(current);
-  useEffect(() => setDraft(current), [current]);
-  if (!isEnum && !isStructure) return null;
-  const changed = JSON.stringify(draft) !== JSON.stringify(current);
+  const currentKey = fieldsKey(current);
+  useEffect(() => setDraft(current), [currentKey]);
+  if (!kind) return null;
+  const [legend, noun] = FIELD_LEGENDS[kind];
+  const changed = fieldsKey(draft) !== currentKey;
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
 
   return (
     <fieldset className="add">
-      <legend>{isEnum ? 'Values' : 'Fields'}</legend>
+      <legend>{legend}</legend>
       {draft.map((f, i) => (
         <div className={`row${isEnum ? '' : ' item-row'}`} key={i}>
           {isEnum && (
-            <input className="value" type="number" step={1} value={f.value ?? i} title="Value"
+            <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? 'Bit' : 'Value'}
               onChange={e => update(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })} />
           )}
           <input placeholder="Name" value={f.name} onChange={e => update(i, { name: e.target.value })} />
@@ -81,6 +99,12 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
               <select value={f.valueRank ?? -1} onChange={e => update(i, { valueRank: Number(e.target.value) })}>
                 {VALUE_RANKS.filter(([k]) => k === -1 || k === 1).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
+              {kind === 'structure' && (
+                <label className="check" title="The field may be absent from a value (StructureWithOptionalFields).">
+                  <input type="checkbox" checked={!!f.isOptional} onChange={e => update(i, { isOptional: e.target.checked || undefined })} />
+                  optional
+                </label>
+              )}
             </>
           )}
           <button title="Remove" onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>
@@ -88,13 +112,45 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
       ))}
       <div className="row">
         <button onClick={() => setDraft(d => [...d, isEnum
-          ? { name: '', value: d.length === 0 ? 0 : Math.max(...d.map((x, j) => x.value ?? j)) + 1 }
-          : { name: '', dataType: uaKey(12), valueRank: -1 }])}>
-          + {isEnum ? 'Value' : 'Field'}
+          ? { name: '', description: '', value: d.length === 0 ? 0 : Math.max(...d.map((x, j) => x.value ?? j)) + 1 }
+          : { name: '', dataType: uaKey(12), valueRank: -1, description: '' }])}>
+          + {noun}
         </button>
         {changed && <button onClick={() => run(() => editor.setFields(dataType.id, draft))}>Apply</button>}
         {changed && <button onClick={() => setDraft(current)}>Discard</button>}
       </div>
+    </fieldset>
+  );
+}
+
+/** A single structure value, one input per field; arrays as elements separated by ";". */
+export function StructureValueSection({ editor, node, shape, current, own, run }: {
+  editor: ModelEditor; node: UaNode; shape: StructureShape; current: Record<string, string> | undefined; own: boolean; run: Run;
+}) {
+  const empty = useMemo(() => Object.fromEntries(shape.fields.map(f => [f.name, ''])), [shape]);
+  const [draft, setDraft] = useState<Record<string, string>>(current ?? empty);
+  // The parsed value is a new object on every render; compare it by content.
+  const currentJson = JSON.stringify(current ?? empty);
+  useEffect(() => setDraft(JSON.parse(currentJson)), [currentJson]);
+  const changed = JSON.stringify(draft) !== currentJson;
+  return (
+    <fieldset className="add">
+      <legend>Value ({shape.element})</legend>
+      {!current && <div className="note">No value yet.</div>}
+      {shape.fields.map(f => (
+        <div className="row struct-row" key={f.name}>
+          <span title={f.builtIn}>{f.name}</span>
+          <input value={draft[f.name] ?? ''} disabled={!own} placeholder={f.array ? `${f.builtIn}; …` : f.builtIn}
+            onChange={e => setDraft(d => ({ ...d, [f.name]: e.target.value }))} />
+        </div>
+      ))}
+      {own && (
+        <div className="row">
+          {changed && <button onClick={() => run(() => editor.setStructuredValue(node.id, draft))}>Apply</button>}
+          {changed && <button onClick={() => setDraft(current ?? empty)}>Discard</button>}
+          {current && !changed && <button onClick={() => run(() => editor.setStructuredValue(node.id, undefined))}>Remove value</button>}
+        </div>
+      )}
     </fieldset>
   );
 }
