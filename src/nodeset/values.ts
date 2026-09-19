@@ -1,9 +1,11 @@
 // Values of Variables and VariableTypes that the panel can edit as text: the
-// built-in scalar types and arrays of them (OPC 10000-6 5.3, XML encoding).
-// Structured values (ExtensionObjects) are left as they were read.
+// built-in scalar types and arrays of them (OPC 10000-6 5.3, XML encoding),
+// and single structures whose fields are such values. Other structured
+// values (ExtensionObjects) are left as they were read.
 
+import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { AddressSpace } from './address-space';
-import { UA_NAMESPACE, UaNode, uaKey } from './model';
+import { ExtensionObjectValue, UA_NAMESPACE, UaNode, uaKey } from './model';
 
 export const TYPES_NS = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
 
@@ -70,6 +72,88 @@ export function valueXml(builtIn: string, text: string, array: boolean): string 
   return array
     ? `<ListOf${builtIn} xmlns="${TYPES_NS}">${encoded.join('')}</ListOf${builtIn}>`
     : encoded[0].replace(`<${builtIn}>`, `<${builtIn} xmlns="${TYPES_NS}">`);
+}
+
+/** A structure the panel can edit: every field a built-in type, no optional fields. */
+export interface StructureShape {
+  /** Key of its "Default XML" DataTypeEncoding, the TypeId of its values. */
+  encoding: string;
+  /** Name and namespace of the body element. */
+  element: string;
+  namespaceUri: string;
+  fields: { name: string; builtIn: string; array: boolean }[];
+}
+
+/**
+ * The shape of a structure's values, or undefined when the panel cannot edit
+ * them: unions, optional fields, fields that are structures or enumerations
+ * (enumerations are "Name_Value" strings in XML), or no XML encoding.
+ */
+export function structureOf(space: AddressSpace, dataType: string | undefined): StructureShape | undefined {
+  const t = space.get(dataType);
+  if (!t || t.nodeClass !== 'DataType' || !t.definition || !space.isSubtypeOf(t.id, uaKey(22)) || space.isSubtypeOf(t.id, uaKey(12756))) return undefined;
+  if (t.definition.otherAttributes.IsUnion === 'true' || t.definition.fields.length === 0) return undefined;
+  const encoding = space.out(t.id, uaKey(38)).map(e => space.get(e.target)).find(n => n?.browseName.name === 'Default XML');
+  if (!encoding) return undefined;
+  const fields: StructureShape['fields'] = [];
+  for (const f of t.definition.fields) {
+    if (f.isOptional || !f.dataType || space.isSubtypeOf(f.dataType, uaKey(29))) return undefined;
+    const builtIn = builtInOf(space, f.dataType);
+    const rank = f.valueRank ?? -1;
+    if (!builtIn || (rank !== -1 && rank !== 1)) return undefined;
+    fields.push({ name: f.name, builtIn, array: rank === 1 });
+  }
+  const namespaceUri = t.id.startsWith(UA_NAMESPACE + '|') ? TYPES_NS : t.definition.name.namespaceUri;
+  return { encoding: encoding.id, element: t.definition.name.name, namespaceUri, fields };
+}
+
+/**
+ * The fields of a single structure value as the panel shows them. Undefined
+ * when there is no value; null when the value is not one of this shape.
+ */
+export function structureText(node: UaNode, shape: StructureShape): Record<string, string> | undefined | null {
+  const eo = node.extensionObjects;
+  if (!eo && !node.valueXml?.trim()) return undefined;
+  if (!eo || eo.list || eo.items.length !== 1 || eo.items[0].typeId !== shape.encoding) return null;
+  const doc = new DOMParser({ onError: () => undefined }).parseFromString(`<r>${eo.items[0].bodyXml}</r>`, 'text/xml');
+  const body = childElements(doc.documentElement as unknown as XmlElement);
+  if (body.length !== 1 || body[0].localName !== shape.element) return null;
+  const byName = new Map(childElements(body[0]).map(e => [e.localName ?? '', e]));
+  const result: Record<string, string> = {};
+  for (const f of shape.fields) {
+    const e = byName.get(f.name);
+    if (!e) { result[f.name] = ''; continue; }
+    const items = f.array ? childElements(e) : [e];
+    result[f.name] = items.map(i => scalarText(i, f.builtIn)).join('; ');
+  }
+  return result;
+}
+
+/** The ExtensionObject of a structure value typed in the panel, field by field. */
+export function structureValue(shape: StructureShape, values: Record<string, string>): ExtensionObjectValue {
+  const fields = shape.fields.map(f => {
+    const text = (values[f.name] ?? '').trim();
+    if (f.array) {
+      const parts = text.split(';').map(s => s.trim()).filter(s => s !== '');
+      return `<${f.name}>${parts.map(p => element(f.builtIn, p)).join('')}</${f.name}>`;
+    }
+    if (text === '' && f.builtIn !== 'String' && f.builtIn !== 'LocalizedText') throw new ValueError(`The field '${f.name}' needs a value.`);
+    const inner = /^<[^>]+>([\s\S]*)<\/[^>]+>$/.exec(element(f.builtIn, text))![1];
+    return `<${f.name}>${inner}</${f.name}>`;
+  });
+  return { typeId: shape.encoding, bodyXml: `<${shape.element} xmlns="${shape.namespaceUri}">${fields.join('')}</${shape.element}>` };
+}
+
+function childElements(e: XmlElement): XmlElement[] {
+  const result: XmlElement[] = [];
+  for (let c = e.firstChild; c; c = c.nextSibling) if (c.nodeType === 1) result.push(c as XmlElement);
+  return result;
+}
+
+function scalarText(e: XmlElement, builtIn: string): string {
+  const wrapped = builtIn === 'LocalizedText' ? 'Text' : builtIn === 'Guid' ? 'String' : undefined;
+  if (!wrapped) return (e.textContent ?? '').trim();
+  return childElements(e).find(c => c.localName === wrapped)?.textContent ?? '';
 }
 
 function element(builtIn: string, text: string): string {

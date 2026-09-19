@@ -9,7 +9,7 @@
 
 import { AddressSpace, REF, RULE } from './address-space';
 import { insideType } from './checks';
-import { builtInOf, ValueError, valueXml } from './values';
+import { builtInOf, structureOf, structureValue, ValueError, valueXml } from './values';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
@@ -539,6 +539,7 @@ export class ModelEditor {
       c.accessLevel = d.accessLevel;
       c.valueXml = d.valueXml;
       c.arguments = d.arguments ? structuredClone(d.arguments) : undefined;
+      c.extensionObjects = d.extensionObjects ? structuredClone(d.extensionObjects) : undefined;
       if (d.nodeClass === 'Method') c.methodDeclaration = d.methodDeclaration ?? d.id;
       c.parent = parent.id;
       parent.references.push({ type: refType, isForward: true, target: c.id });
@@ -564,11 +565,34 @@ export class ModelEditor {
       const n = this.node(key);
       if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
       if (n.arguments) throw new EditError('Arguments are edited in their own section.');
-      if (text === undefined || text.trim() === '') { n.valueXml = undefined; return; }
+      if (text === undefined || text.trim() === '') { n.valueXml = undefined; n.extensionObjects = undefined; return; }
       const builtIn = builtInOf(this.space(), n.dataType);
       if (!builtIn) throw new EditError('Values of this DataType are structures; the panel does not edit them.');
       try {
         n.valueXml = valueXml(builtIn, text, (n.valueRank ?? -1) >= 0);
+        n.extensionObjects = undefined;
+      } catch (e) {
+        if (e instanceof ValueError) throw new EditError(e.message);
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Sets a single structure value field by field, encoded with the
+   * DataType's "Default XML" encoding. Undefined removes the value.
+   */
+  setStructuredValue(key: string, values: Record<string, string> | undefined): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
+      if (values === undefined) { n.valueXml = undefined; n.extensionObjects = undefined; return; }
+      if ((n.valueRank ?? -1) >= 0) throw new EditError('The panel edits single structures, not arrays of them.');
+      const shape = structureOf(this.space(), n.dataType);
+      if (!shape) throw new EditError('The panel edits structures whose fields are all built-in types and not optional.');
+      try {
+        n.extensionObjects = { list: false, items: [structureValue(shape, values)] };
+        n.valueXml = undefined;
       } catch (e) {
         if (e instanceof ValueError) throw new EditError(e.message);
         throw e;

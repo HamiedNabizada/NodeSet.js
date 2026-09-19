@@ -108,6 +108,7 @@ function writeNode(
   for (const inv of n.inverseName ?? []) out.push(`    ${localized('InverseName', inv)}`);
   if (n.definition) writeDefinition(out, n.definition, refText, qn);
   if (n.arguments) writeArguments(out, n.arguments, idText);
+  else if (n.extensionObjects) writeExtensionObjects(out, n.extensionObjects, idText);
   else if (n.valueXml !== undefined) out.push(`    <Value>${n.valueXml}</Value>`);
   out.push(`  </UA${n.nodeClass}>`);
 }
@@ -130,6 +131,14 @@ function writeDefinition(out: string[], d: DataTypeDefinition, refText: (k: stri
     out.push(inner.length === 0 ? `      <Field${a} />` : `      <Field${a}>${inner.join('')}</Field>`);
   }
   out.push('    </Definition>');
+}
+
+function writeExtensionObjects(out: string[], value: { list: boolean; items: { typeId: string; bodyXml: string }[] }, idText: (k: string) => string) {
+  const encoded = value.items.map(i =>
+    `<ExtensionObject${value.list ? '' : ` xmlns="${UA_TYPES_NS}"`}><TypeId><Identifier>${esc(idText(i.typeId))}</Identifier></TypeId><Body>${i.bodyXml}</Body></ExtensionObject>`);
+  out.push(value.list
+    ? `    <Value><ListOfExtensionObject xmlns="${UA_TYPES_NS}">${encoded.join('')}</ListOfExtensionObject></Value>`
+    : `    <Value>${encoded[0]}</Value>`);
 }
 
 /** InputArguments / OutputArguments as the XML encoding of a list of Argument structures. */
@@ -167,6 +176,7 @@ export function namespaceTable(file: NodeSetFile): string[] {
     if (n.browseName.namespaceUri !== UA_NAMESPACE && !table.includes(n.browseName.namespaceUri)) table.push(n.browseName.namespaceUri);
     for (const r of n.references) { add(r.type); add(r.target); }
     for (const a of n.arguments ?? []) add(a.dataType);
+    for (const o of n.extensionObjects?.items ?? []) add(o.typeId);
     for (const f of n.definition?.fields ?? []) add(f.dataType);
     if (n.definition && n.definition.name.namespaceUri !== UA_NAMESPACE && !table.includes(n.definition.name.namespaceUri)) {
       table.push(n.definition.name.namespaceUri);

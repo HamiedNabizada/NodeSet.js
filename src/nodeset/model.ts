@@ -95,6 +95,14 @@ export interface DataTypeDefinition {
   otherAttributes: Record<string, string>;
 }
 
+/** An ExtensionObject in a value: its encoding's NodeId as a key, its body as read. */
+export interface ExtensionObjectValue {
+  /** Key of the TypeId, the DataTypeEncoding node ("Default XML"). */
+  typeId: string;
+  /** Inner XML of the Body element. */
+  bodyXml: string;
+}
+
 export interface UaNode {
   /** Key of the NodeId, see nodeIdKey. */
   id: string;
@@ -124,6 +132,11 @@ export interface UaNode {
    * replaces valueXml on writing, because the XML holds namespace indexes.
    */
   arguments?: Argument[];
+  /**
+   * A value of ExtensionObjects (one, or a ListOfExtensionObject). When set,
+   * it replaces valueXml on writing, because the TypeId is a NodeId.
+   */
+  extensionObjects?: { list: boolean; items: ExtensionObjectValue[] };
   /** DataType: the Definition, with DataTypes as keys. */
   definition?: DataTypeDefinition;
   /** Attributes of the element the model does not name, kept for writing. */

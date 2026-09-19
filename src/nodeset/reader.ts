@@ -123,6 +123,10 @@ function readNode(
     const args = readArguments(value, resolve);
     if (args) { node.arguments = args; node.valueXml = undefined; }
   }
+  if (value && !node.arguments) {
+    const objects = readExtensionObjects(value, resolve, serializer);
+    if (objects) { node.extensionObjects = objects; node.valueXml = undefined; }
+  }
   return node;
 }
 
@@ -160,6 +164,26 @@ function readArguments(value: El, resolve: (raw: string | null) => string | unde
     result.push(arg);
   }
   return result;
+}
+
+/** One ExtensionObject or a list of them, or undefined if the value holds anything else. */
+function readExtensionObjects(value: El, resolve: (raw: string | null) => string | undefined, serializer: XMLSerializer):
+  { list: boolean; items: { typeId: string; bodyXml: string }[] } | undefined {
+  const top = elementChildren(value);
+  if (top.length !== 1) return undefined;
+  const list = top[0].localName === 'ListOfExtensionObject';
+  if (!list && top[0].localName !== 'ExtensionObject') return undefined;
+  const objects = list ? elementChildren(top[0]) : [top[0]];
+  const items: { typeId: string; bodyXml: string }[] = [];
+  for (const eo of objects) {
+    const identifier = path(eo, 'TypeId', 'Identifier');
+    const body = path(eo, 'Body');
+    if (eo.localName !== 'ExtensionObject' || !identifier || !body || elementChildren(eo).length !== 2) return undefined;
+    const typeId = resolve(textOf(identifier));
+    if (!typeId) return undefined;
+    items.push({ typeId, bodyXml: innerXml(body, serializer) });
+  }
+  return { list, items };
 }
 
 function readDefinition(e: El, resolve: (raw: string | null) => string | undefined, resolveIndex: (i: number) => string): DataTypeDefinition {
