@@ -32,6 +32,25 @@ function reread(ws: Workspace, name: string) {
 }
 
 describe('Structure values of any shape', () => {
+  it('writes well-formed XML whatever the namespace URI holds, and leaves names XML cannot carry alone', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Shapes?kind=a&b="c"/');
+    const e = ws.editor!;
+    const point = e.addType('DataType', 'PointType', uaKey(22));
+    e.setFields(point, [{ name: 'X', dataType: uaKey(11) }, { name: 'Y', dataType: uaKey(11) }]);
+    const holder = e.addType('ObjectType', 'HolderType');
+    const v = e.addDeclaration(holder, 'Variable', 'Where');
+    e.setDataType(v, point);
+    e.setStructureValue(v, [{ X: '1', Y: '2' }]);
+
+    const node = reread(ws, 'Where');
+    expect(structureValues(ws.space, node, structShape(ws.space, point)!)!.items[0]).toEqual({ X: '1', Y: '2' });
+
+    const odd = e.addType('DataType', 'OddType', uaKey(22));
+    e.setFields(odd, [{ name: 'a b', dataType: uaKey(11) }]);
+    expect(structShape(ws.space, odd)).toBeUndefined();
+  });
+
   it('knows which structures it edits', async () => {
     const { ws, shape } = await model();
     const s = structShape(ws.space, shape)!;

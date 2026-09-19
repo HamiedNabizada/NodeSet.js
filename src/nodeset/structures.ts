@@ -65,6 +65,8 @@ export function structShape(space: AddressSpace, key: string | undefined, seen =
   const t = space.get(key);
   if (!t || !key || t.nodeClass !== 'DataType' || !t.definition || !space.isSubtypeOf(t.id, STRUCTURE)) return undefined;
   if (t.definition.fields.length === 0) return undefined;
+  // Names become element names of the encoding; a name XML cannot carry is not edited here.
+  if (!isXmlName(t.definition.name.name) || t.definition.fields.some(f => !isXmlName(f.name))) return undefined;
   seen.add(key);
   const union = space.isSubtypeOf(t.id, UNION) || t.definition.otherAttributes.IsUnion === 'true';
   const fields: FieldShape[] = [];
@@ -87,6 +89,15 @@ export function structShape(space: AddressSpace, key: string | undefined, seen =
   const namespaceUri = t.id.startsWith(UA_NAMESPACE + '|') ? TYPES_NS : t.definition.name.namespaceUri;
   const encoding = space.out(t.id, uaKey(38)).map(e => space.get(e.target)).find(n => n?.browseName.name === 'Default XML');
   return { key, element: t.definition.name.name, namespaceUri, encoding: encoding?.id, union, fields };
+}
+
+/** A name XML allows for an element without escaping (ASCII letters, digits, '_', '-', '.'). */
+function isXmlName(name: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name);
+}
+
+function escapeAttribute(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
 function enumValues(space: AddressSpace, key: string): { name: string; value: number }[] | undefined {
@@ -190,7 +201,7 @@ function enumName(f: FieldShape, text: string): string | null {
 export function encodeStructure(space: AddressSpace, key: string, value: StructValue, elementName?: string, path = ''): string {
   const shape = shapeOf(space, key);
   const name = elementName ?? shape.element;
-  const open = elementName ? `<${name}>` : `<${name} xmlns="${shape.namespaceUri}">`;
+  const open = elementName ? `<${name}>` : `<${name} xmlns="${escapeAttribute(shape.namespaceUri)}">`;
   const parts: string[] = [];
   if (shape.union) {
     const chosen = shape.fields.findIndex(f => value[f.name] !== undefined);
