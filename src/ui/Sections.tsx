@@ -129,6 +129,35 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
   );
 }
 
+/** Creates an instance of a type: a name and the Optional declarations to include. */
+export function InstantiateSection({ editor, type, run, onCreated }: { editor: ModelEditor; type: UaNode; run: Run; onCreated: (key: string) => void }) {
+  const [name, setName] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const optional = useMemo(() => editor.optionalPaths(type.id), [editor, type]);
+  const create = () => run(() => {
+    const key = editor.instantiate(type.id, name, { optional: p => picked.has(p) });
+    setName('');
+    onCreated(key);
+  });
+  return (
+    <fieldset className="add">
+      <legend>Create instance</legend>
+      {optional.length > 0 && <div className="note">Optional children to include:</div>}
+      {optional.map(p => (
+        <label key={p} className="check">
+          <input type="checkbox" checked={picked.has(p)}
+            onChange={e => setPicked(s => { const n = new Set(s); if (e.target.checked) n.add(p); else n.delete(p); return n; })} />
+          {p}
+        </label>
+      ))}
+      <div className="row">
+        <input placeholder="Name of the instance" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) create(); }} />
+        <button disabled={!name.trim() || !!type.isAbstract} title={type.isAbstract ? 'Abstract types have no instances.' : undefined} onClick={create}>Create</button>
+      </div>
+    </fieldset>
+  );
+}
+
 /** "PumpType/Motor/Speed": the node's name after those of the nodes that hold it. */
 function pathOf(space: AddressSpace, n: UaNode): string {
   const parts: string[] = [];

@@ -79,3 +79,8 @@ fieldset.add .row.item-row > select { flex: 0 0 auto; }
 fieldset.add > input[list] { width: 100%; box-sizing: border-box; }
 fieldset.add .row > select { min-width: 0; flex: 1; }
 fieldset.add { min-width: 0; }
+.type-hint { color: var(--muted); font-size: 11px; font-style: italic; }
+fieldset.add label.check { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+/* Grid items take the width of their content by default; long option texts would push them out. */
+fieldset.add > *, fieldset.add .row > * { min-width: 0; }
+fieldset.add > select, fieldset.add .row > select { max-width: 100%; }

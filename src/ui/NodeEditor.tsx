@@ -3,9 +3,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AddressSpace, RULE } from '../nodeset/address-space';
+import { insideType } from '../nodeset/checks';
 import { DeclarationKind, ModelEditor } from '../nodeset/edit';
 import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
-import { ArgumentsSection, FieldsSection, ReferencesSection } from './Sections';
+import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection } from './Sections';
 
 const RULES: [string, string][] = [
   ['', '(none)'],
@@ -27,9 +28,11 @@ interface Props {
   run: (action: () => unknown) => void;
   onOpenType: (key: string) => void;
   onCreated: (key: string) => void;
+  /** An instance was created: show it. */
+  onInstance: (key: string) => void;
 }
 
-export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated }: Props) {
+export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated, onInstance }: Props) {
   const node = space.get(nodeKey);
   if (!node) return <div className="empty">Unknown node.</div>;
   const own = editor.owns(nodeKey);
@@ -68,7 +71,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated 
           {typeDefinition && <button className="link" onClick={() => onOpenType(typeDefinition.id)}>open</button>}
         </Field>
       )}
-      {!isType && (
+      {!isType && insideType(space, node) && (
         <Field label="ModellingRule">
           <select value={rule ?? ''} disabled={!own} onChange={e => run(() => editor.setModellingRule(nodeKey, e.target.value || undefined))}>
             {RULES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -102,8 +105,13 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated 
       )}
       {own && node.nodeClass === 'Method' && <ArgumentsSection space={space} editor={editor} method={node} run={run} />}
       {own && node.nodeClass === 'DataType' && <FieldsSection space={space} editor={editor} dataType={node} run={run} />}
-      {own && canHoldChildren(node.nodeClass) && <AddChild editor={editor} parent={nodeKey} run={run} onCreated={onCreated} />}
+      {own && canHoldChildren(node.nodeClass) && (
+        <AddChild editor={editor} parent={nodeKey} run={run} onCreated={onCreated} declaration={isType || insideType(space, node)} />
+      )}
       {own && <ReferencesSection space={space} editor={editor} node={node} run={run} />}
+      {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
+        <InstantiateSection editor={editor} type={node} run={run} onCreated={onInstance} />
+      )}
       {own && (
         <div className="actions">
           {isType && <button onClick={() => onOpenType(nodeKey)}>Show diagram</button>}
@@ -118,7 +126,11 @@ function canHoldChildren(c: NodeClass): boolean {
   return c === 'ObjectType' || c === 'VariableType' || c === 'Object' || c === 'Variable';
 }
 
-function AddChild({ editor, parent, run, onCreated }: { editor: ModelEditor; parent: string; run: Props['run']; onCreated: Props['onCreated'] }) {
+function AddChild({ editor, parent, run, onCreated, declaration }: {
+  editor: ModelEditor; parent: string; run: Props['run']; onCreated: Props['onCreated'];
+  /** Children of types are declarations with a ModellingRule; children of instances are not. */
+  declaration: boolean;
+}) {
   const [kind, setKind] = useState<DeclarationKind>('Variable');
   const [name, setName] = useState('');
   const [rule, setRule] = useState<string>(RULE.Mandatory);
@@ -139,9 +151,11 @@ function AddChild({ editor, parent, run, onCreated }: { editor: ModelEditor; par
         <option value="Object">Object (HasComponent)</option>
         <option value="Method">Method (HasComponent)</option>
       </select>
-      <select value={rule} onChange={e => setRule(e.target.value)}>
-        {RULES.filter(([k]) => k).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-      </select>
+      {declaration && (
+        <select value={rule} onChange={e => setRule(e.target.value)}>
+          {RULES.filter(([k]) => k).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      )}
       <div className="row">
         <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
         <button onClick={add} disabled={!name.trim()}>Add</button>

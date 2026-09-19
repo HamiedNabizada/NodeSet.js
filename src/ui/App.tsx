@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { UaModeler } from '../modeler/Modeler';
+import { REF } from '../nodeset/address-space';
 import { check, Finding } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
-import { NodeClass, text, UaNode } from '../nodeset/model';
+import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { Workspace } from '../workspace';
 import { NodeEditor } from './NodeEditor';
 
@@ -14,6 +15,8 @@ const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'Re
 ];
 
 type Status = { text: string; warn?: boolean };
+
+const OBJECTS = uaKey(85);
 
 export function App() {
   const [workspace, setWorkspace] = useState<Workspace>();
@@ -170,6 +173,16 @@ export function App() {
     }));
   }, [workspace, filter, showExternal, revision]);
 
+  // Instances of the model: its Objects and Variables organized by the Objects folder.
+  const instances = useMemo(() => {
+    if (!workspace?.editable) return [];
+    const needle = filter.trim().toLowerCase();
+    return workspace.editable.nodes
+      .filter(n => (n.nodeClass === 'Object' || n.nodeClass === 'Variable') && workspace.space.in(n.id, REF.Organizes).some(e => e.source === OBJECTS))
+      .filter(n => !needle || label(n).toLowerCase().includes(needle))
+      .sort((a, b) => label(a).localeCompare(label(b)));
+  }, [workspace, filter, revision]);
+
   const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
     const name = window.prompt(`Name of the new ${nodeClass}`);
     if (!name || !workspace?.editor) return;
@@ -241,6 +254,17 @@ export function App() {
               ))}
             </div>
           ))}
+          {workspace && (
+            <div>
+              <div className="group">Instances ({instances.length})</div>
+              {instances.map(n => (
+                <div key={n.id} className={`item${n.id === shown ? ' active' : ''}`} title={n.id}
+                  onClick={() => { setShown(n.id); setSelected(n.id); }}>
+                  {label(n)} <span className="type-hint">{typeName(workspace, n)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {!workspace && <div className="empty">No model open.</div>}
         </div>
         <div className="canvas">
@@ -250,7 +274,8 @@ export function App() {
         <div className="side right">
           {workspace && editor && selected && workspace.space.get(selected)
             ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
-                onOpenType={key => { setShown(key); setSelected(key); }} onCreated={key => setSelected(key)} />
+                onOpenType={key => { setShown(key); setSelected(key); }} onCreated={key => setSelected(key)}
+                onInstance={key => { setShown(key); setSelected(key); }} />
             : <div className="empty">Select a node.</div>}
         </div>
       </div>
@@ -267,6 +292,11 @@ export function App() {
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
     </div>
   );
+}
+
+function typeName(ws: Workspace, n: UaNode): string {
+  const t = ws.space.typeDefinition(n);
+  return t ? '::' + label(t) : '';
 }
 
 function label(n: UaNode): string {
