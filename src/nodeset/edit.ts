@@ -27,9 +27,24 @@ export const TYPE_DEFINITIONS = {
 
 export type DeclarationKind = 'Object' | 'Variable' | 'Property' | 'Method';
 
+export interface InstantiateOptions {
+  /** Where to put the instance; the Objects folder when missing. */
+  parent?: string;
+  /** How the parent holds it; HasComponent by default. */
+  referenceType?: string;
+  /** Which Optional declarations to include, by path relative to the instance. */
+  optional?: (path: string) => boolean;
+  allowAbstract?: boolean;
+}
+
+const OBJECTS_FOLDER = uaKey(85);
 const ARGUMENT = uaKey(296);
 const STRUCTURE = uaKey(22);
 const ENUMERATION = uaKey(29);
+
+function qualified(n: UaNode): string {
+  return `${n.browseName.namespaceUri}|${n.browseName.name}`;
+}
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -369,6 +384,99 @@ export class ModelEditor {
   private removeNodes(doomed: Set<string>) {
     this.file.nodes = this.file.nodes.filter(n => !doomed.has(n.id));
     for (const n of this.file.nodes) n.references = n.references.filter(r => !doomed.has(r.target));
+  }
+
+  /**
+   * Creates an instance of an ObjectType or VariableType the way a server
+   * would: every Mandatory declaration of the type and its supertypes, the
+   * Optional ones the caller picks (by path relative to the instance, such as
+   * "Motor/Temperature"), no placeholders. A declaration of a subtype
+   * overrides one of the same BrowseName in a supertype; a declaration's own
+   * children override those of its type. References between declarations are
+   * carried over to the new nodes. Without a parent the instance is organized
+   * by the Objects folder.
+   */
+  instantiate(type: string, name: string, options: InstantiateOptions = {}): string {
+    return this.change(() => {
+      const space = this.space();
+      const t = space.get(type);
+      if (!t || (t.nodeClass !== 'ObjectType' && t.nodeClass !== 'VariableType')) throw new EditError('Only ObjectTypes and VariableTypes have instances.');
+      if (t.isAbstract && !options.allowAbstract) throw new EditError(`'${t.browseName.name}' is abstract; OPC UA does not instantiate abstract types.`);
+      const parent = options.parent ? this.node(options.parent) : undefined;
+      if (parent && space.children(parent).some(c => c.node.browseName.name === name.trim())) {
+        throw new EditError(`'${parent.browseName.name}' already has a child named '${name.trim()}'.`);
+      }
+
+      const mapping = new Map<string, string>();
+      const root = this.create(t.nodeClass === 'ObjectType' ? 'Object' : 'Variable', name);
+      root.references.push({ type: REF.HasTypeDefinition, isForward: true, target: t.id });
+      if (t.nodeClass === 'VariableType') { root.dataType = t.dataType; root.valueRank = t.valueRank === -2 ? -1 : t.valueRank; }
+      if (parent) {
+        const refType = options.referenceType ?? REF.HasComponent;
+        parent.references.push({ type: refType, isForward: true, target: root.id });
+        root.references.push({ type: refType, isForward: false, target: parent.id });
+        root.parent = parent.id;
+      } else {
+        root.references.push({ type: REF.Organizes, isForward: false, target: OBJECTS_FOLDER });
+      }
+      mapping.set(t.id, root.id);
+      this.fill(root, this.declarationsOf(t.id), '', options, mapping, 0);
+
+      // References between declarations become references between the new nodes.
+      for (const [declaration, instance] of mapping) {
+        const node = this.file.nodes.find(n => n.id === instance)!;
+        for (const e of space.out(declaration)) {
+          if (space.isHierarchical(e.type) || e.type === REF.HasTypeDefinition || e.type === REF.HasModellingRule) continue;
+          const target = mapping.get(e.target);
+          if (target) node.references.push({ type: e.type, isForward: true, target });
+        }
+      }
+      return root.id;
+    });
+  }
+
+  /** The effective declarations of a type: its own and its supertypes', by BrowseName, the most specific winning. */
+  private declarationsOf(type: string): Map<string, { node: UaNode; refType: string }> {
+    const space = this.space();
+    const result = new Map<string, { node: UaNode; refType: string }>();
+    const chain = space.typeChain(space.get(type)!).reverse();
+    for (const t of chain) {
+      for (const c of space.children(t)) result.set(qualified(c.node), { node: c.node, refType: c.edge.type });
+    }
+    return result;
+  }
+
+  private fill(parent: UaNode, declarations: Map<string, { node: UaNode; refType: string }>, path: string,
+    options: InstantiateOptions, mapping: Map<string, string>, depth: number) {
+    if (depth > 20) throw new EditError('The type nests its declarations more than 20 levels deep.');
+    const space = this.space();
+    for (const { node: d, refType } of declarations.values()) {
+      const rule = space.modellingRule(d);
+      const childPath = path ? `${path}/${d.browseName.name}` : d.browseName.name;
+      const include = rule === RULE.Mandatory || (rule === RULE.Optional && (options.optional?.(childPath) ?? false));
+      if (!include) continue;
+      const c = this.create(d.nodeClass, d.browseName.name);
+      c.browseName = d.browseName;
+      c.displayName = structuredClone(d.displayName);
+      c.description = structuredClone(d.description);
+      c.dataType = d.dataType;
+      c.valueRank = d.valueRank;
+      c.arrayDimensions = d.arrayDimensions;
+      c.accessLevel = d.accessLevel;
+      c.valueXml = d.valueXml;
+      c.arguments = d.arguments ? structuredClone(d.arguments) : undefined;
+      c.parent = parent.id;
+      parent.references.push({ type: refType, isForward: true, target: c.id });
+      c.references.push({ type: refType, isForward: false, target: parent.id });
+      const typeDefinition = space.typeDefinition(d);
+      if (typeDefinition) c.references.push({ type: REF.HasTypeDefinition, isForward: true, target: typeDefinition.id });
+      mapping.set(d.id, c.id);
+
+      // The declaration's own children override those its type declares.
+      const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, { node: UaNode; refType: string }>();
+      for (const own of space.children(d)) inner.set(qualified(own.node), { node: own.node, refType: own.edge.type });
+      this.fill(c, inner, childPath, options, mapping, depth + 1);
+    }
   }
 
   /** Whether a node belongs to the model being edited. */
