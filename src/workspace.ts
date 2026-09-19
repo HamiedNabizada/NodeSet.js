@@ -25,6 +25,8 @@ export class Workspace {
   /** Required models, in load order. */
   private readonly dependencies: NodeSetFile[] = [];
   private readonly loaded = new Set<string>();
+  /** The required models, indexed once; the editable model sits on top. */
+  private base?: AddressSpace;
 
   get editable(): NodeSetFile | undefined {
     return this.editor?.file;
@@ -43,6 +45,7 @@ export class Workspace {
   private async start(file: NodeSetFile): Promise<OpenResult> {
     this.dependencies.length = 0;
     this.loaded.clear();
+    this.base = undefined;
     const missing = await this.require(file, new Set());
     this.layout = readLayout(file);
     this.editor = new ModelEditor(file, () => this.space, f => this.rebuild(f));
@@ -62,11 +65,15 @@ export class Workspace {
   private add(file: NodeSetFile) {
     this.dependencies.push(file);
     for (const m of file.models) this.loaded.add(m.modelUri);
+    this.base = undefined;
   }
 
   private rebuild(editable: NodeSetFile) {
-    const space = new AddressSpace();
-    for (const d of this.dependencies) space.load(d);
+    if (!this.base) {
+      this.base = new AddressSpace();
+      for (const d of this.dependencies) this.base.load(d);
+    }
+    const space = new AddressSpace(this.base);
     space.load(editable, true);
     this.space = space;
   }
