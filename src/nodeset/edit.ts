@@ -504,6 +504,19 @@ export class ModelEditor {
     }
   }
 
+  /** Version and publication date of the model being edited. */
+  setModelInfo(version: string, publicationDate: string): void {
+    this.change(() => {
+      const m = this.file.models[0];
+      if (!m) throw new EditError('The file declares no model.');
+      if (!version.trim()) throw new EditError('A version is required.');
+      const date = new Date(publicationDate);
+      if (Number.isNaN(date.getTime())) throw new EditError(`'${publicationDate}' is not a date.`);
+      m.version = version.trim();
+      m.publicationDate = date.toISOString().replace(/\.\d+Z$/, 'Z');
+    });
+  }
+
   /** Whether a node belongs to the model being edited. */
   owns(key: string): boolean {
     return this.file.nodes.some(n => n.id === key);

@@ -53,13 +53,55 @@ export class Workspace {
     return { file, missing };
   }
 
-  /** Adds a model the editable file requires but that is not bundled. */
+  /** Adds a model from a NodeSet file, with what it requires; returns the models still missing. */
   async addRequired(xml: string): Promise<string[]> {
     const file = readNodeSet(xml);
+    if (file.models.length > 0 && file.models.every(m => this.loaded.has(m.modelUri))) return [];
     const missing = await this.require(file, new Set());
     this.add(file);
     if (this.editable) this.rebuild(this.editable);
     return missing;
+  }
+
+  /** Adds a model the modeler ships (DI), with what it requires. */
+  async addBundled(modelUri: string): Promise<void> {
+    if (this.loaded.has(modelUri)) return;
+    const file = await loadBundled(modelUri);
+    await this.require(file, new Set());
+    this.add(file);
+    if (this.editable) this.rebuild(this.editable);
+  }
+
+  /** The models loaded besides the editable one. */
+  get loadedModels(): { modelUri: string; version?: string; publicationDate?: string }[] {
+    return this.dependencies.flatMap(d => d.models.map(m => ({ modelUri: m.modelUri, version: m.version, publicationDate: m.publicationDate })));
+  }
+
+  /**
+   * Adds a RequiredModel for every namespace the editable model uses and does
+   * not declare yet, with the version and date of the loaded model. Without
+   * it, a NodeSet importer does not know it has to load that model.
+   */
+  syncRequiredModels(): string[] {
+    const file = this.editable;
+    const own = file?.models[0];
+    if (!file || !own) return [];
+    const used = new Set<string>([UA_NAMESPACE]);
+    const add = (key: string | undefined) => { if (key) used.add(key.slice(0, key.lastIndexOf('|'))); };
+    for (const n of file.nodes) {
+      add(n.dataType);
+      for (const r of n.references) { add(r.type); add(r.target); }
+      for (const a of n.arguments ?? []) add(a.dataType);
+      for (const f of n.definition?.fields ?? []) add(f.dataType);
+    }
+    const added: string[] = [];
+    for (const uri of used) {
+      if (file.models.some(m => m.modelUri === uri) || own.requiredModels.some(r => r.modelUri === uri)) continue;
+      const info = this.loadedModels.find(m => m.modelUri === uri);
+      own.requiredModels.push({ modelUri: uri, version: info?.version, publicationDate: info?.publicationDate });
+      added.push(uri);
+    }
+    return added;
   }
 
   private add(file: NodeSetFile) {
@@ -121,6 +163,7 @@ export class Workspace {
   save(): string {
     if (!this.editable) throw new Error('Nothing is open.');
     writeLayout(this.editable, this.layout);
+    this.syncRequiredModels();
     return writeNodeSet(this.editable);
   }
 }
