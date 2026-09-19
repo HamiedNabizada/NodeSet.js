@@ -209,6 +209,20 @@ plugin catches exceptions whose stack passes through its own code in
 still catch what they expect.
 *FPB plugin:* worth the same net.
 
+**Keep WebView2 on its own page.** Whatever sends "apply" writes into the
+document, so the host refuses navigation to anything but its virtual host,
+refuses new windows, takes messages only from that origin and turns the
+developer tools off in a release build.
+*FPB plugin:* the same four lines apply to its bridge.
+
+**Write the document on the UI thread only.** Library code with
+`ConfigureAwait(false)` before its writes changed the document from a pool
+thread while mirroring; Aml.Engine and the editor's tree are not made for
+that. Code that writes the document now resumes on the caller's context, and
+a test runs it on a thread with its own synchronization context and checks
+where every XML change happened.
+*FPB plugin:* worth checking every await before a write.
+
 **Keep a selection where its result lives.** The part of a server mirrored
 into a hierarchy is stored as an attribute at the element that stands for
 the server, so "mirror again" needs neither settings nor a new selection.
