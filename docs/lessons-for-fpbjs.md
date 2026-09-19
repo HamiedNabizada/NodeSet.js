@@ -164,6 +164,14 @@ to answer modal dialogs) and renders each tab with `RenderTargetBitmap`.
 WebView2 content is an HWND and does not appear in such a picture.
 *FPB plugin:* the same probe would show every view after a change.
 
+**One frame for every dialog.** The OPC UA plugin's eight dialogs share a
+small kit (`DialogKit`): a header with the command's glyph in the colour of
+its kind, a title and one sentence on what the dialog does; search boxes with
+a placeholder; list entries with the name and, in grey, what tells it apart;
+a footer with messages left and the answer right. New dialogs cost less and
+look like the rest.
+*FPB plugin:* its input dialogs would fit the same kit.
+
 **Aml.Engine wraps anew on every access.** Two reads of the same element give
 two wrapper objects; compare IDs, not references (`Assert.Same` fails).
 
