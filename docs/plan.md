@@ -63,6 +63,15 @@ Added after M6, from a review of what was missing:
   without closing. Structure values escape the
   namespace URI and leave out types whose names XML cannot carry.
 
+- A catalogue of rules on the NodeSet itself (`checks.ts`, M001 to M019):
+  besides the earlier ones on types and instances, a NodeId in a namespace the
+  model does not own, ValueRank against ArrayDimensions, a method argument of
+  an unknown DataType, a placeholder not named <like this>, a node held by
+  HasProperty that is no Variable of PropertyType, fields of the same name or
+  values of the same number, a symmetric ReferenceType with an InverseName, and
+  a node no reference leads to. Each finding carries its rule; the rule's
+  sentence is its tooltip.
+
 - Variables from a signal list: "Variables from CSV…" on a type or object of
   the model reads a CSV file (comma, semicolon or tab, header row; columns
   Name, DataType, Kind, ModellingRule, Description, Value) and adds one

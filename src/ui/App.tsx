@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InfoModeler } from '../modeler/Modeler';
 import { REF, RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
-import { check, Finding } from '../nodeset/checks';
+import { check, Finding, RULES } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
@@ -396,7 +396,7 @@ export function App() {
           {findings.map((f, i) => (
             <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
               onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>
-              <span className="severity">{f.severity}</span> <span className="rule">{f.rule}</span> {f.message}
+              <span className="severity">{f.severity}</span> <span className="rule" title={RULES[f.rule]}>{f.rule}</span> {f.message}
             </div>
           ))}
         </div>

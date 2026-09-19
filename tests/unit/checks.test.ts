@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { REF } from '../../src/nodeset/address-space';
+import { REF, RULE } from '../../src/nodeset/address-space';
 import { check } from '../../src/nodeset/checks';
 import { readNodeSet } from '../../src/nodeset/reader';
+import { uaKey } from '../../src/nodeset/model';
 import { Workspace } from '../../src/workspace';
 
 describe('Checks', () => {
@@ -51,5 +52,45 @@ describe('Checks', () => {
     expect(check(ws.space, ws.editable!).map(f => f.rule)).toEqual(['M011']);
     ws.editor!.setFields(settings, [{ name: 'Speed', dataType: 'http://opcfoundation.org/UA/|i=11' }]);
     expect(check(ws.space, ws.editable!)).toEqual([]);
+  });
+});
+
+describe('Rules on the NodeSet itself', () => {
+  it('finds arrays, placeholders, properties, duplicate fields, symmetric inverse names and lost nodes', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Rules/');
+    const e = ws.editor!;
+    const type = e.addType('ObjectType', 'PumpType');
+    const rules = (): string[] => check(ws.space, ws.editable!).map(f => f.rule);
+
+    // ArrayDimensions without an array ValueRank.
+    const speed = e.addDeclaration(type, 'Variable', 'Speed');
+    ws.space.get(speed)!.arrayDimensions = '3';
+    expect(rules()).toContain('M013');
+    e.setValueRank(speed, 1);
+    expect(rules()).not.toContain('M013');
+
+    // A placeholder that is not named <like this>.
+    const slot = e.addDeclaration(type, 'Object', 'Slot', RULE.MandatoryPlaceholder);
+    expect(rules()).toContain('M015');
+    e.rename(slot, '<Slot>');
+    expect(rules()).not.toContain('M015');
+
+    // An Object held by HasProperty.
+    const child = e.addDeclaration(type, 'Object', 'Held');
+    e.removeReference(type, REF.HasComponent, child);
+    e.addReference(type, REF.HasProperty, child);
+    expect(rules()).toContain('M016');
+
+    // Two fields of the same name, as a file may hold them; the editor itself refuses them.
+    const data = e.addType('DataType', 'SettingsType', uaKey(22));
+    e.setFields(data, [{ name: 'A', dataType: uaKey(11) }]);
+    expect(() => e.setFields(data, [{ name: 'A', dataType: uaKey(11) }, { name: 'A', dataType: uaKey(11) }])).toThrow(/named 'A'/);
+    ws.space.get(data)!.definition!.fields.push({ ...ws.space.get(data)!.definition!.fields[0] });
+    expect(rules()).toContain('M017');
+    const reference = e.addType('ReferenceType', 'RunsWith');
+    e.setSymmetric(reference, true);
+    e.setInverseName(reference, 'RunsWith');
+    expect(rules()).toContain('M018');
   });
 });
