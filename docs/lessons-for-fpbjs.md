@@ -232,6 +232,16 @@ name, lists what may be chosen (the ReferenceTypes) and keeps itself open
 with a message when the answer is wrong.
 *FPB.js:* any prompt for a name fits the same component.
 
+**A tutorial that watches the state, not the clicks.** The OPC UA plugin's
+lessons run on the real plugin: each step names the control it is about (by
+x:Name, framed in the adorner layer) and a condition on the plugin's state
+(a namespace imported, a server served) that ticks it off. Users may take
+another way and still arrive; a test checks that every named control exists.
+Driving a lesson in the probe found two real bugs: a server certificate made
+for another address, and a lesson step that could never be reached.
+*FPB.js:* a first-steps tour over the modeler would work the same way, with
+conditions on the FPB model instead of clicks.
+
 **Keep a selection where its result lives.** The part of a server mirrored
 into a hierarchy is stored as an attribute at the element that stands for
 the server, so "mirror again" needs neither settings nor a new selection.
