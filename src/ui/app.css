@@ -90,3 +90,8 @@ label.button-like { display: inline-block; padding: 3px 10px; border: 1px solid 
 label.button-like input[type=file] { display: none; }
 fieldset.add > button { justify-self: start; }
 fieldset.add .row input.value { flex: 0 0 64px; }
+.djs-context-pad .entry.ua-pad { width: 22px; height: 22px; line-height: 22px; text-align: center; font: 600 12px 'Segoe UI', Arial, sans-serif;
+  background: #fff; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
+.djs-context-pad .entry.ua-pad:hover { background: #ddf4ff; border-color: var(--accent); }
+.toolbar { flex-wrap: wrap; row-gap: 4px; }
+.toolbar button, .toolbar label.button, .toolbar .title { white-space: nowrap; }

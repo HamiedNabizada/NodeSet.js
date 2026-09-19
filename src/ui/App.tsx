@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { UaModeler } from '../modeler/Modeler';
-import { REF } from '../nodeset/address-space';
+import { REF, RULE } from '../nodeset/address-space';
+import { insideType } from '../nodeset/checks';
 import { check, Finding } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
@@ -37,6 +38,9 @@ export function App() {
   const selectedRef = useRef<string>();
   selectedRef.current = selected;
   const [dirty, setDirty] = useState(false);
+  // The canvas outlives renders; it reaches the current edit function through a ref.
+  const runRef = useRef<(action: () => unknown) => void>(() => undefined);
+  const lastReferenceType = useRef('Organizes');
   // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
   const host = useMemo(() => HostBridge.detect(), []);
   const bump = useCallback(() => setRevision(r => r + 1), []);
@@ -97,6 +101,8 @@ export function App() {
     }
   }, [changed]);
 
+  runRef.current = run;
+
   const undo = useCallback(() => { workspace?.editor?.undo(); changed(); }, [workspace, changed]);
   const redo = useCallback(() => { workspace?.editor?.redo(); changed(); }, [workspace, changed]);
 
@@ -149,7 +155,28 @@ export function App() {
   // The canvas lives as long as the workspace.
   useEffect(() => {
     if (!workspace || !canvasRef.current) return;
-    const modeler = new UaModeler(canvasRef.current, () => workspace.space);
+    const modeler = new UaModeler(canvasRef.current, () => workspace.space, {
+      isOwn: key => workspace.editor?.owns(key) ?? false,
+      canHoldChildren: key => ['ObjectType', 'VariableType', 'Object', 'Variable'].includes(workspace.space.get(key)?.nodeClass ?? ''),
+      addChild: (key, kind) => {
+        const name = window.prompt(`Name of the new ${kind}`);
+        if (!name) return;
+        runRef.current(() => {
+          const parent = workspace.space.get(key)!;
+          const declaration = parent.nodeClass.endsWith('Type') || insideType(workspace.space, parent);
+          setSelected(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
+        });
+      },
+      addReference: (source, target) => {
+        const name = window.prompt('ReferenceType of the new reference', lastReferenceType.current);
+        if (!name) return;
+        const type = findReferenceType(workspace, name.trim());
+        if (!type) { setStatus({ text: `There is no ReferenceType named '${name.trim()}'.`, warn: true }); return; }
+        lastReferenceType.current = name.trim();
+        runRef.current(() => workspace.editor!.addReference(source, type, target));
+      },
+      remove: key => runRef.current(() => workspace.editor!.delete(key)),
+    });
     modeler.onSelect(key => { if (key) setSelected(key); });
     modeler.onOpen(key => {
       const node = workspace.space.get(key);
@@ -327,6 +354,12 @@ export function App() {
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
     </div>
   );
+}
+
+/** A ReferenceType by name, preferring the edited model's own. */
+function findReferenceType(ws: Workspace, name: string): string | undefined {
+  const matches = ws.space.ofClass('ReferenceType').filter(n => n.browseName.name === name || text(n.displayName) === name);
+  return (matches.find(n => ws.editor?.owns(n.id)) ?? matches[0])?.id;
 }
 
 function typeName(ws: Workspace, n: UaNode): string {
