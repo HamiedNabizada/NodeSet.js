@@ -6,6 +6,7 @@
 import { AddressSpace } from './nodeset/address-space';
 import { isBundled, loadBundled } from './nodeset/bundled';
 import { ModelEditor, newModel } from './nodeset/edit';
+import { Layout, readLayout, writeLayout } from './nodeset/layout';
 import { NodeSetFile, UA_NAMESPACE } from './nodeset/model';
 import { readNodeSet } from './nodeset/reader';
 import { writeNodeSet } from './nodeset/writer';
@@ -19,6 +20,8 @@ export interface OpenResult {
 export class Workspace {
   space = new AddressSpace();
   editor?: ModelEditor;
+  /** Where the user placed nodes; not part of undo. */
+  layout: Layout = new Map();
   /** Required models, in load order. */
   private readonly dependencies: NodeSetFile[] = [];
   private readonly loaded = new Set<string>();
@@ -41,6 +44,7 @@ export class Workspace {
     this.dependencies.length = 0;
     this.loaded.clear();
     const missing = await this.require(file, new Set());
+    this.layout = readLayout(file);
     this.editor = new ModelEditor(file, () => this.space, f => this.rebuild(f));
     this.rebuild(file);
     return { file, missing };
@@ -81,6 +85,18 @@ export class Workspace {
     return [...new Set(missing)];
   }
 
+  /** Remembers where the user put a node on the diagram of a type. */
+  place(diagram: string, node: string, x: number, y: number): void {
+    let positions = this.layout.get(diagram);
+    if (!positions) this.layout.set(diagram, positions = new Map());
+    positions.set(node, { x, y });
+  }
+
+  /** Forgets the positions of a diagram, so it is laid out anew. */
+  resetLayout(diagram: string): void {
+    this.layout.delete(diagram);
+  }
+
   /** The namespaces of the editable file's own models. */
   get ownNamespaces(): string[] {
     return this.editable?.models.map(m => m.modelUri) ?? [];
@@ -88,6 +104,7 @@ export class Workspace {
 
   save(): string {
     if (!this.editable) throw new Error('Nothing is open.');
+    writeLayout(this.editable, this.layout);
     return writeNodeSet(this.editable);
   }
 }

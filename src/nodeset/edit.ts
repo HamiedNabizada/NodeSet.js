@@ -242,6 +242,29 @@ export class ModelEditor {
     this.change(() => { this.node(key).valueRank = valueRank; });
   }
 
+  /** ReferenceType: a symmetric type has no InverseName. */
+  setSymmetric(key: string, symmetric: boolean): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'ReferenceType') throw new EditError('Only a ReferenceType is symmetric or not.');
+      n.symmetric = symmetric ? true : undefined;
+      if (symmetric) n.inverseName = [];
+    });
+  }
+
+  setInverseName(key: string, inverseName: string): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'ReferenceType') throw new EditError('Only a ReferenceType has an InverseName.');
+      n.inverseName = inverseName.trim() ? [{ text: inverseName.trim() }] : [];
+    });
+  }
+
+  /** Whether a node belongs to the model being edited. */
+  owns(key: string): boolean {
+    return this.file.nodes.some(n => n.id === key);
+  }
+
   addReference(source: string, type: string, target: string): void {
     this.change(() => {
       const s = this.node(source);

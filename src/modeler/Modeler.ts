@@ -33,7 +33,8 @@ export class UaModeler {
   readonly diagram: Diagram;
   current?: TypeDiagram;
 
-  constructor(container: HTMLElement, readonly space: AddressSpace) {
+  /** @param space the current address space; the workspace replaces it after every change */
+  constructor(container: HTMLElement, private readonly space: () => AddressSpace) {
     this.diagram = new Diagram({
       canvas: { container },
       modules: [RendererModule, SelectionModule, OutlineModule, ModelingModule, MoveModule, MoveCanvasModule, ZoomScrollModule],
@@ -46,7 +47,7 @@ export class UaModeler {
 
   /** Shows a type with its instance declarations. */
   showType(typeKey: string, options?: TypeDiagramOptions): TypeDiagram {
-    const model = buildTypeDiagram(this.space, typeKey, options);
+    const model = buildTypeDiagram(this.space(), typeKey, options);
     this.diagram.clear();
     const canvas = this.get<Canvas>('canvas');
     const factory = this.get<ElementFactory>('elementFactory');
@@ -78,6 +79,14 @@ export class UaModeler {
     }
   }
 
+  /** Selects the shape of a node, if the diagram shows it. */
+  select(nodeKey: string | undefined): void {
+    const registry = this.get<{ get(id: string): unknown }>('elementRegistry');
+    const selection = this.get<{ select(element: unknown): void }>('selection');
+    const element = nodeKey ? registry.get(nodeKey) : undefined;
+    selection.select(element ?? null);
+  }
+
   /** Called with the node key of a shape when the user selects or opens it. */
   onSelect(callback: (nodeKey: string | undefined) => void): void {
     this.get<EventBus>('eventBus').on('selection.changed', (e: { newSelection?: { businessObject?: { nodeKey?: string } }[] }) => {
@@ -89,6 +98,15 @@ export class UaModeler {
     this.get<EventBus>('eventBus').on('element.dblclick', e => {
       const key = (e.element?.businessObject as { nodeKey?: string } | undefined)?.nodeKey;
       if (key) callback(key);
+    });
+  }
+
+  /** Called when the user has moved shapes, with each shape's node key and new position. */
+  onMoved(callback: (moved: { nodeKey: string; x: number; y: number }[]) => void): void {
+    this.get<EventBus>('eventBus').on('commandStack.elements.move.postExecuted', (e: { context: { shapes: { x: number; y: number; businessObject?: { nodeKey?: string } }[] } }) => {
+      callback(e.context.shapes
+        .filter(s => s.businessObject?.nodeKey)
+        .map(s => ({ nodeKey: s.businessObject!.nodeKey!, x: s.x, y: s.y })));
     });
   }
 

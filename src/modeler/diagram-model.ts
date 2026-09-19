@@ -69,6 +69,8 @@ export interface TypeDiagramOptions {
   maxShapes?: number;
   /** Namespaces of the model being edited; nodes of others are marked external. */
   ownNamespaces?: string[];
+  /** Positions the user chose, by node key; the others are laid out as a tree. */
+  positions?: ReadonlyMap<string, { x: number; y: number }>;
 }
 
 export const SIZE = {
@@ -126,8 +128,8 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
       isType,
       external: own ? !own.includes(node.browseName.namespaceUri) && !own.some(ns => node.id.startsWith(ns + '|')) : false,
       isAbstract: node.isAbstract === true,
-      x: SIZE.margin + column * SIZE.column,
-      y: SIZE.margin + row * SIZE.row,
+      x: options.positions?.get(node.id)?.x ?? SIZE.margin + column * SIZE.column,
+      y: options.positions?.get(node.id)?.y ?? SIZE.margin + row * SIZE.row,
       width: SIZE.width,
       height: SIZE.height,
     };
