@@ -20,6 +20,21 @@ rules, checks, NodeSet in and out.
 | M5 | Embedding in the AMLOpcUa plugin through WebView2, exchange with the C# core | done |
 | M6 | Library build, standalone build, documentation | done |
 
+Added after M6, from a review of what was missing:
+
+- Further models: DI (bundled) or any NodeSet file can be loaded into a model;
+  saving declares every model whose nodes are used as RequiredModel.
+- Model version and publication date.
+- Values of built-in types, scalar and array, checked against the type.
+- DataTypeEncodings ("Default Binary", "Default XML", "Default JSON") for
+  structures, and check M010.
+- Enumerations with any values (EnumValues instead of EnumStrings).
+- MethodDeclarationId kept as a NodeId and set on methods of instances.
+- Editing on the canvas: context pad (add child, draw reference, delete).
+
+Not done: OptionSets and unions, structured values (ExtensionObjects) in the
+panel, a test inside the AutomationML Editor itself.
+
 ## Decisions
 
 - **NodeId identity.** A NodeId is keyed by namespace URI and identifier;

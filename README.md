@@ -7,10 +7,12 @@ AutomationML Editor plugin [AMLOpcUa](../AMLOpcUa), which connects the models
 to AutomationML (OPC 10000-83 Annex A, AML-UA-XSLT rules) and to VDI 3682
 process descriptions.
 
-What it does: types (ObjectTypes, VariableTypes, DataTypes with fields or
-enumeration values, ReferenceTypes), instance declarations with
-ModellingRules, method arguments, references, instances by ModellingRule,
-checks against OPC 10000-3, undo, and diagram positions kept in the NodeSet.
+What it does: types (ObjectTypes, VariableTypes, DataTypes with fields,
+encodings or enumeration values, ReferenceTypes), instance declarations with
+ModellingRules, values, method arguments, references, instances by
+ModellingRule, models built on DI or other loaded models with their
+RequiredModels kept, checks against OPC 10000-3, undo, editing from the
+canvas's context pad, and diagram positions kept in the NodeSet.
 Inside the AutomationML Editor it runs in the Modeler tab of AMLOpcUa, which
 opens a namespace of the document and imports the result back
 ([AMLOpcUa docs/modeler.md](../AMLOpcUa/docs/modeler.md)).
