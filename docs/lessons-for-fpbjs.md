@@ -84,6 +84,31 @@ DataType fields are edited as a list in the panel and applied with one
 button, which is one undo step and one validation, instead of an edit per
 keystroke.
 
+## Embedding in the AutomationML Editor
+
+**Test the host bridge without the host.** A Playwright init script puts a
+fake `window.chrome.webview` into the page that records `postMessage` and can
+dispatch host messages. The whole protocol (ready, open, dirty, apply) is
+checked in a browser in seconds, before any C# is built.
+*FPB.js:* the FPB plugin's bridge could get the same harness.
+
+**Drive React from `ExecuteScriptAsync` with the native value setter.**
+Setting `input.value` does not reach React's `onChange`; calling the
+prototype's `value` setter and dispatching an `input` event does. With that,
+a WPF probe can click through the embedded page end to end.
+
+**Give WebView2 its own profile folder.** Without `CreationProperties`,
+WebView2 writes its profile next to the executable; under Program Files that
+fails. The OPC UA plugin uses `%LOCALAPPDATA%\AMLOpcUa\WebView2`.
+*FPB.js plugin:* sets none today and works only because the editor was
+installed per user.
+
+**A test host needs the plugin's dependencies itself.** A plugin that
+references its core with `PrivateAssets=all` gives a test executable no
+entry for the core's dependencies in its `deps.json`; the OPC UA stack then
+failed in a type initializer, while the plugin works in the editor, which
+loads it with its own `deps.json`. The probe references the core directly.
+
 ## Tooling
 
 **Big data as lazy chunks.** The 4 MB base NodeSet is an `asset/source`

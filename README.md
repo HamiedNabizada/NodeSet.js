@@ -7,7 +7,16 @@ AutomationML Editor plugin [AMLOpcUa](../AMLOpcUa), which connects the models
 to AutomationML (OPC 10000-83 Annex A, AML-UA-XSLT rules) and to VDI 3682
 process descriptions.
 
-Status: in development, see [docs/plan.md](docs/plan.md).
+What it does: types (ObjectTypes, VariableTypes, DataTypes with fields or
+enumeration values, ReferenceTypes), instance declarations with
+ModellingRules, method arguments, references, instances by ModellingRule,
+checks against OPC 10000-3, undo, and diagram positions kept in the NodeSet.
+Inside the AutomationML Editor it runs in the Modeler tab of AMLOpcUa, which
+opens a namespace of the document and imports the result back
+([AMLOpcUa docs/modeler.md](../AMLOpcUa/docs/modeler.md)).
+
+Status: in development, see [docs/plan.md](docs/plan.md). Lessons that apply to
+FPB.js are collected in [docs/lessons-for-fpbjs.md](docs/lessons-for-fpbjs.md).
 
 ```bash
 npm install
