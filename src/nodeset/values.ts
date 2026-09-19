@@ -144,19 +144,20 @@ export function structureValue(shape: StructureShape, values: Record<string, str
   return { typeId: shape.encoding, bodyXml: `<${shape.element} xmlns="${shape.namespaceUri}">${fields.join('')}</${shape.element}>` };
 }
 
-function childElements(e: XmlElement): XmlElement[] {
+export function childElements(e: XmlElement): XmlElement[] {
   const result: XmlElement[] = [];
   for (let c = e.firstChild; c; c = c.nextSibling) if (c.nodeType === 1) result.push(c as XmlElement);
   return result;
 }
 
-function scalarText(e: XmlElement, builtIn: string): string {
+export function scalarText(e: XmlElement, builtIn: string): string {
   const wrapped = builtIn === 'LocalizedText' ? 'Text' : builtIn === 'Guid' ? 'String' : undefined;
   if (!wrapped) return (e.textContent ?? '').trim();
   return childElements(e).find(c => c.localName === wrapped)?.textContent ?? '';
 }
 
-function element(builtIn: string, text: string): string {
+/** A scalar of a built-in type as its XML element; throws ValueError for text that is not of the type. */
+export function element(builtIn: string, text: string): string {
   const fail = (what: string) => { throw new ValueError(`'${text}' is not ${what}.`); };
   let content = text;
   if (builtIn === 'Boolean') {

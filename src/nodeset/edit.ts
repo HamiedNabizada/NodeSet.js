@@ -10,6 +10,7 @@
 import { AddressSpace, REF, RULE } from './address-space';
 import { insideType } from './checks';
 import { builtInOf, structureOf, structureValue, ValueError, valueXml } from './values';
+import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
@@ -697,6 +698,30 @@ export class ModelEditor {
       if (!shape) throw new EditError('The panel edits structures whose fields are all built-in types and not optional.');
       try {
         n.extensionObjects = { list: false, items: [structureValue(shape, values)] };
+        n.valueXml = undefined;
+      } catch (e) {
+        if (e instanceof ValueError) throw new EditError(e.message);
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Sets a structure value of any shape the panel edits (nested structures,
+   * enumerations, arrays, optional fields, unions): one structure, or a list
+   * when the ValueRank is an array. Undefined removes the value.
+   */
+  setStructureValue(key: string, items: StructValue[] | undefined): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
+      if (items === undefined) { n.valueXml = undefined; n.extensionObjects = undefined; return; }
+      const list = (n.valueRank ?? -1) >= 0;
+      if (!list && items.length !== 1) throw new EditError('A scalar value is one structure.');
+      const shape = structShape(this.space(), n.dataType);
+      if (!shape) throw new EditError('Values of this DataType are not edited here.');
+      try {
+        n.extensionObjects = { list, items: structureObjects(this.space(), shape, items) };
         n.valueXml = undefined;
       } catch (e) {
         if (e instanceof ValueError) throw new EditError(e.message);
