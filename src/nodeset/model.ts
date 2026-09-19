@@ -63,6 +63,38 @@ export interface Reference {
   target: string;
 }
 
+/** An element of InputArguments or OutputArguments (the Argument structure, OPC 10000-3 8.6). */
+export interface Argument {
+  name: string;
+  /** Key of the DataType. */
+  dataType: string;
+  valueRank: number;
+  arrayDimensions: number[];
+  description?: LocalizedText;
+}
+
+/** A field of a structure or enumeration DataType (OPC 10000-6 F.12). */
+export interface DefinitionField {
+  name: string;
+  /** Structures: key of the field's DataType. */
+  dataType?: string;
+  valueRank?: number;
+  arrayDimensions?: string;
+  /** Enumerations and OptionSets: the value. */
+  value?: number;
+  isOptional?: boolean;
+  description: LocalizedText[];
+  displayName: LocalizedText[];
+  otherAttributes: Record<string, string>;
+}
+
+export interface DataTypeDefinition {
+  name: QualifiedName;
+  fields: DefinitionField[];
+  /** IsUnion, IsOptionSet, SymbolicName … as read. */
+  otherAttributes: Record<string, string>;
+}
+
 export interface UaNode {
   /** Key of the NodeId, see nodeIdKey. */
   id: string;
@@ -85,8 +117,13 @@ export interface UaNode {
   accessLevel?: number;
   /** Raw inner XML of the Value element, written back unchanged. */
   valueXml?: string;
-  /** DataType: raw XML of the Definition element. */
-  definitionXml?: string;
+  /**
+   * InputArguments and OutputArguments: the value as Arguments. When set, it
+   * replaces valueXml on writing, because the XML holds namespace indexes.
+   */
+  arguments?: Argument[];
+  /** DataType: the Definition, with DataTypes as keys. */
+  definition?: DataTypeDefinition;
   /** Attributes of the element the model does not name, kept for writing. */
   otherAttributes: Record<string, string>;
   /** Child elements the model does not name (Extensions, Documentation, RolePermissions …), raw. */

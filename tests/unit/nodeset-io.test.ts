@@ -18,7 +18,6 @@ function fingerprint(file: NodeSetFile): Map<string, string> {
       references: refs,
       // Raw XML is compared without whitespace and namespace declarations.
       valueXml: normalize(n.valueXml),
-      definitionXml: normalize(n.definitionXml),
       otherElements: n.otherElements.map(normalize),
     }));
   }
@@ -67,6 +66,28 @@ describe('NodeSet2 reading and writing', () => {
 
     expect(ua.nodes.length).toBeGreaterThan(5000);
     expectSameContent(ua, again);
+  });
+
+  it('reads arguments and definitions as structures', () => {
+    const di = readNodeSet(asset('Opc.Ua.Di.NodeSet2.xml'));
+    const withArguments = di.nodes.filter(n => n.arguments);
+    const transferResult = di.nodes.find(n => n.browseName.name === 'TransferResultDataDataType')!;
+
+    expect(withArguments.length).toBeGreaterThan(20);
+    expect(di.nodes.filter(n => n.browseName.name.endsWith('Arguments') && !n.arguments)).toEqual([]);
+    expect(transferResult.definition!.fields.map(f => f.name)).toEqual(['SequenceNumber', 'EndOfResults', 'ParameterDefs']);
+    expect(transferResult.definition!.fields[2].dataType).toBe(`${DI}|i=6525`);
+  });
+
+  it('keeps DataTypes in arguments and definitions right when the namespace table changes', () => {
+    const di = readNodeSet(asset('Opc.Ua.Di.NodeSet2.xml'));
+    // DI moves from index 1 to index 2.
+    di.namespaceUris.unshift('http://example.org/First/');
+    const xml = writeNodeSet(di);
+    const again = readNodeSet(xml);
+
+    expect(xml).toContain('<Identifier>ns=2;i=');
+    expectSameContent(readNodeSet(asset('Opc.Ua.Di.NodeSet2.xml')), again);
   });
 
   it('writes well-formed XML with the NodeSet namespace', () => {

@@ -2,7 +2,7 @@
 // it was read in; namespaces used since are appended. References and data
 // types use an alias where the file has one for the target.
 
-import { LocalizedText, NodeSetFile, parseNodeIdKey, QualifiedName, UA_NAMESPACE, UaNode } from './model';
+import { Argument, DataTypeDefinition, LocalizedText, NodeSetFile, parseNodeIdKey, QualifiedName, UA_NAMESPACE, UaNode } from './model';
 
 const UA_NODESET_NS = 'http://opcfoundation.org/UA/2011/03/UANodeSet.xsd';
 const UA_TYPES_NS = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
@@ -105,9 +105,49 @@ function writeNode(
   }
   for (const raw of late) out.push('    ' + raw);
   for (const inv of n.inverseName ?? []) out.push(`    ${localized('InverseName', inv)}`);
-  if (n.definitionXml) out.push('    ' + n.definitionXml);
-  if (n.valueXml !== undefined) out.push(`    <Value>${n.valueXml}</Value>`);
+  if (n.definition) writeDefinition(out, n.definition, refText, qn);
+  if (n.arguments) writeArguments(out, n.arguments, idText);
+  else if (n.valueXml !== undefined) out.push(`    <Value>${n.valueXml}</Value>`);
   out.push(`  </UA${n.nodeClass}>`);
+}
+
+function writeDefinition(out: string[], d: DataTypeDefinition, refText: (k: string) => string, qn: (q: QualifiedName) => string) {
+  const own = attributes({ Name: qn(d.name), ...d.otherAttributes });
+  if (d.fields.length === 0) { out.push(`    <Definition${own} />`); return; }
+  out.push(`    <Definition${own}>`);
+  for (const f of d.fields) {
+    const a = attributes({
+      Name: f.name,
+      DataType: f.dataType ? refText(f.dataType) : undefined,
+      ValueRank: f.valueRank?.toString(),
+      ArrayDimensions: f.arrayDimensions,
+      Value: f.value?.toString(),
+      IsOptional: f.isOptional === undefined ? undefined : String(f.isOptional),
+      ...f.otherAttributes,
+    });
+    const inner = [...f.displayName.map(t => localized('DisplayName', t)), ...f.description.map(t => localized('Description', t))];
+    out.push(inner.length === 0 ? `      <Field${a} />` : `      <Field${a}>${inner.join('')}</Field>`);
+  }
+  out.push('    </Definition>');
+}
+
+/** InputArguments / OutputArguments as the XML encoding of a list of Argument structures. */
+function writeArguments(out: string[], args: Argument[], idText: (k: string) => string) {
+  out.push('    <Value>');
+  out.push(`      <ListOfExtensionObject xmlns="${UA_TYPES_NS}">`);
+  for (const a of args) {
+    const dims = a.arrayDimensions.length > 0
+      ? `<ArrayDimensions>${a.arrayDimensions.map(d => `<UInt32>${d}</UInt32>`).join('')}</ArrayDimensions>`
+      : '<ArrayDimensions />';
+    const description = a.description
+      ? `<Description>${a.description.locale ? `<Locale>${esc(a.description.locale)}</Locale>` : ''}<Text>${esc(a.description.text)}</Text></Description>`
+      : '';
+    out.push('        <ExtensionObject><TypeId><Identifier>i=297</Identifier></TypeId><Body><Argument>'
+      + `<Name>${esc(a.name)}</Name><DataType><Identifier>${esc(idText(a.dataType))}</Identifier></DataType>`
+      + `<ValueRank>${a.valueRank}</ValueRank>${dims}${description}</Argument></Body></ExtensionObject>`);
+  }
+  out.push('      </ListOfExtensionObject>');
+  out.push('    </Value>');
 }
 
 /** The file's table, extended by every namespace its nodes use. */
@@ -124,6 +164,11 @@ export function namespaceTable(file: NodeSetFile): string[] {
     add(n.dataType);
     if (n.browseName.namespaceUri !== UA_NAMESPACE && !table.includes(n.browseName.namespaceUri)) table.push(n.browseName.namespaceUri);
     for (const r of n.references) { add(r.type); add(r.target); }
+    for (const a of n.arguments ?? []) add(a.dataType);
+    for (const f of n.definition?.fields ?? []) add(f.dataType);
+    if (n.definition && n.definition.name.namespaceUri !== UA_NAMESPACE && !table.includes(n.definition.name.namespaceUri)) {
+      table.push(n.definition.name.namespaceUri);
+    }
   }
   for (const key of file.aliases.values()) add(key);
   return table;

@@ -4,7 +4,7 @@
 
 import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 import {
-  LocalizedText, ModelInfo, NodeClass, NodeSetFile, NODE_CLASSES, QualifiedName, Reference, UA_NAMESPACE, UaNode,
+  Argument, DataTypeDefinition, LocalizedText, ModelInfo, NodeClass, NodeSetFile, NODE_CLASSES, QualifiedName, Reference, UA_NAMESPACE, UaNode,
 } from './model';
 
 export class NodeSetFormatError extends Error {}
@@ -114,11 +114,69 @@ function readNode(
     arrayDimensions: attr(e, 'ArrayDimensions'),
     accessLevel: num(e, 'AccessLevel'),
     valueXml: value ? innerXml(value, serializer) : undefined,
-    definitionXml: definition ? serializer.serializeToString(definition) : undefined,
+    definition: definition ? readDefinition(definition, resolve, resolveIndex) : undefined,
     otherAttributes: otherAttributes(e, NAMED_NODE_ATTRIBUTES),
     otherElements: elementChildren(e).filter(c => !NAMED_NODE_ELEMENTS.has(c.localName ?? '')).map(c => serializer.serializeToString(c)),
   };
+  if (value && node.dataType === ARGUMENT_TYPE) {
+    const args = readArguments(value, resolve);
+    if (args) { node.arguments = args; node.valueXml = undefined; }
+  }
   return node;
+}
+
+const ARGUMENT_TYPE = `${UA_NAMESPACE}|i=296`;
+const ARGUMENT_XML_ENCODING = 'i=297';
+
+/** The Arguments of a ListOfExtensionObject value, or undefined if the value holds anything else. */
+function readArguments(value: El, resolve: (raw: string | null) => string | undefined): Argument[] | undefined {
+  const list = elementChildren(value);
+  if (list.length !== 1 || list[0].localName !== 'ListOfExtensionObject') return undefined;
+  const known = new Set(['Name', 'DataType', 'ValueRank', 'ArrayDimensions', 'Description']);
+  const result: Argument[] = [];
+  for (const eo of elementChildren(list[0])) {
+    const typeId = path(eo, 'TypeId', 'Identifier');
+    const body = path(eo, 'Body', 'Argument');
+    if (eo.localName !== 'ExtensionObject' || !typeId || textOf(typeId) !== ARGUMENT_XML_ENCODING || !body) return undefined;
+    if (elementChildren(body).some(c => !known.has(c.localName ?? ''))) return undefined;
+    const dataTypeId = path(body, 'DataType', 'Identifier');
+    const dataType = dataTypeId ? resolve(textOf(dataTypeId)) : undefined;
+    if (!dataType) return undefined;
+    const description = path(body, 'Description', 'Text');
+    const locale = path(body, 'Description', 'Locale');
+    const valueRank = path(body, 'ValueRank');
+    const dimensions = path(body, 'ArrayDimensions');
+    const name = path(body, 'Name');
+    const arg: Argument = {
+      name: name ? textOf(name) : '',
+      dataType,
+      valueRank: valueRank ? Number(textOf(valueRank)) : -1,
+      arrayDimensions: dimensions ? elementChildren(dimensions).map(d => Number(textOf(d))) : [],
+    };
+    if (description && textOf(description)) {
+      arg.description = locale && textOf(locale) ? { text: textOf(description), locale: textOf(locale) } : { text: textOf(description) };
+    }
+    result.push(arg);
+  }
+  return result;
+}
+
+function readDefinition(e: El, resolve: (raw: string | null) => string | undefined, resolveIndex: (i: number) => string): DataTypeDefinition {
+  return {
+    name: parseQualifiedName(e.getAttribute('Name') ?? '', resolveIndex),
+    otherAttributes: otherAttributes(e, new Set(['Name'])),
+    fields: children(e, 'Field').map(f => ({
+      name: f.getAttribute('Name') ?? '',
+      dataType: resolve(f.getAttribute('DataType')),
+      valueRank: num(f, 'ValueRank'),
+      arrayDimensions: attr(f, 'ArrayDimensions'),
+      value: num(f, 'Value'),
+      isOptional: bool(f, 'IsOptional'),
+      description: localized(f, 'Description'),
+      displayName: localized(f, 'DisplayName'),
+      otherAttributes: otherAttributes(f, new Set(['Name', 'DataType', 'ValueRank', 'ArrayDimensions', 'Value', 'IsOptional'])),
+    })),
+  };
 }
 
 /** "ns=2;i=5", "i=5", "nsu=http://…;s=X" → key. */
@@ -167,6 +225,13 @@ function elementChildren(e: El): El[] {
 
 function children(e: El, localName: string): El[] {
   return elementChildren(e).filter(c => c.localName === localName);
+}
+
+/** The first element along a path of child names, or undefined. */
+function path(e: El, ...names: string[]): El | undefined {
+  let current: El | undefined = e;
+  for (const name of names) current = current ? children(current, name)[0] : undefined;
+  return current;
 }
 
 function textOf(e: El): string {
