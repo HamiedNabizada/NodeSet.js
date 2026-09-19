@@ -146,3 +146,16 @@ fieldset.add .row.item-row > label.check { flex: 0 0 auto; }
 .djs-context-pad .entry.ua-pad:hover { background: #ddf4ff; border-color: #0969da; }
 .toolbar { flex-wrap: wrap; row-gap: 4px; }
 .toolbar button, .toolbar label.button, .toolbar .title { white-space: nowrap; }
+
+/* Structure values: nested fields, array items, optional fields. */
+.struct-fields { display: grid; gap: 4px; }
+.struct-nested { border-left: 2px solid var(--line); padding: 2px 0 2px 8px; margin: 2px 0 2px 2px; display: grid; gap: 4px; }
+.struct-nested > summary { cursor: pointer; color: var(--ink); list-style-position: outside; }
+.struct-nested > summary .note { margin-left: 6px; }
+.struct-item { border: 1px dashed var(--line); border-radius: 5px; padding: 4px 6px; display: grid; gap: 4px; }
+.struct-head { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.struct-head > span { flex: 1; }
+.struct-head button { padding: 1px 8px; }
+.struct-optional { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 4px; padding-top: 3px; }
+fieldset.add .row.struct-row > select { flex: 1; min-width: 0; }
+fieldset.add .row.struct-row > span input[type=checkbox] { margin: 0 4px 0 0; vertical-align: -2px; }

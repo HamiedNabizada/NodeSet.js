@@ -38,9 +38,14 @@ Added after M6, from a review of what was missing:
   OptionSetValues), unions (IsUnion), optional structure fields, check M011.
   Changing a DataType's supertype fits its encodings and fields.
 
-Not done: arrays of structures, structures with optional or structured fields
-and unions as values (kept as read), a test inside the AutomationML Editor
-itself.
+- Structure values of any shape (`structures.ts`, OPC 10000-6 5.3.6): nested
+  structures, enumerations ("Name_Value"), arrays of all of these, optional
+  fields (EncodingMask), unions (SwitchField), structures that contain
+  themselves, and arrays of structures as the value of a Variable. The panel
+  edits them as nested fields; deep levels start folded.
+
+Not done: structure fields that allow subtypes (their values name their own
+type), matrices, a test inside the AutomationML Editor itself.
 
 ## Decisions
 

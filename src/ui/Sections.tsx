@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
 import { Argument, text, uaKey, UaNode } from '../nodeset/model';
-import { StructureShape } from '../nodeset/values';
+import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
 
 type Run = (action: () => unknown) => void;
@@ -124,34 +124,176 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
 }
 
 /** A single structure value, one input per field; arrays as elements separated by ";". */
-export function StructureValueSection({ editor, node, shape, current, own, run }: {
-  editor: ModelEditor; node: UaNode; shape: StructureShape; current: Record<string, string> | undefined; own: boolean; run: Run;
+export function StructureValueSection({ space, editor, node, shape, current, own, run }: {
+  space: AddressSpace; editor: ModelEditor; node: UaNode; shape: StructShape;
+  current: { list: boolean; items: StructValue[] } | undefined; own: boolean; run: Run;
 }) {
-  const empty = useMemo(() => Object.fromEntries(shape.fields.map(f => [f.name, ''])), [shape]);
-  const [draft, setDraft] = useState<Record<string, string>>(current ?? empty);
+  const list = (node.valueRank ?? -1) >= 0;
+  const fresh = useMemo(() => (list ? [] : [emptyStructure(space, shape.key)]), [space, shape.key, list]);
   // The parsed value is a new object on every render; compare it by content.
-  const currentJson = JSON.stringify(current ?? empty);
+  const currentJson = JSON.stringify(current?.items ?? fresh);
+  const [draft, setDraft] = useState<StructValue[]>(JSON.parse(currentJson));
   useEffect(() => setDraft(JSON.parse(currentJson)), [currentJson]);
   const changed = JSON.stringify(draft) !== currentJson;
+  const set = (i: number, v: StructValue) => setDraft(d => d.map((x, j) => (j === i ? v : x)));
+
   return (
     <fieldset className="add">
-      <legend>Value ({shape.element})</legend>
+      <legend>Value ({shape.element}{list ? ', array' : ''})</legend>
       {!current && <div className="note">No value yet.</div>}
-      {shape.fields.map(f => (
-        <div className="row struct-row" key={f.name}>
-          <span title={f.builtIn}>{f.name}</span>
-          <input value={draft[f.name] ?? ''} disabled={!own} placeholder={f.array ? `${f.builtIn}; …` : f.builtIn}
-            onChange={e => setDraft(d => ({ ...d, [f.name]: e.target.value }))} />
+      {draft.map((item, i) => (
+        <div key={i} className={list ? 'struct-item' : undefined}>
+          {list && (
+            <div className="struct-head">
+              <span>[{i}]</span>
+              {own && <button onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>Remove</button>}
+            </div>
+          )}
+          <StructFields space={space} shapeKey={shape.key} value={item} onChange={v => set(i, v)} disabled={!own} depth={0} />
         </div>
       ))}
+      {own && list && <div className="row"><button onClick={() => setDraft(d => [...d, emptyStructure(space, shape.key)])}>Add item</button></div>}
       {own && (
         <div className="row">
-          {changed && <button onClick={() => run(() => editor.setStructuredValue(node.id, draft))}>Apply</button>}
-          {changed && <button onClick={() => setDraft(current ?? empty)}>Discard</button>}
-          {current && !changed && <button onClick={() => run(() => editor.setStructuredValue(node.id, undefined))}>Remove value</button>}
+          {changed && <button onClick={() => run(() => editor.setStructureValue(node.id, draft))}>Apply</button>}
+          {changed && <button onClick={() => setDraft(JSON.parse(currentJson))}>Discard</button>}
+          {current && !changed && <button onClick={() => run(() => editor.setStructureValue(node.id, undefined))}>Remove value</button>}
         </div>
       )}
     </fieldset>
+  );
+}
+
+/**
+ * The fields of one structure value. A union shows which field is set and
+ * that field; an optional field is included or left out with its box.
+ */
+function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
+  space: AddressSpace; shapeKey: string; value: StructValue; onChange: (v: StructValue) => void; disabled: boolean; depth: number;
+}) {
+  const shape = useMemo(() => structShape(space, shapeKey), [space, shapeKey]);
+  if (!shape) return <div className="note">Not edited here.</div>;
+  const setField = (name: string, v: FieldValue | undefined) => onChange({ ...value, [name]: v });
+
+  if (shape.union) {
+    const chosen = shape.fields.find(f => value[f.name] !== undefined);
+    return (
+      <div className="struct-fields">
+        <div className="row struct-row">
+          <span>set field</span>
+          <select value={chosen?.name ?? ''} disabled={disabled}
+            onChange={e => {
+              const f = shape.fields.find(x => x.name === e.target.value);
+              onChange(f ? { [f.name]: emptyField(space, f, depth) } : {});
+            }}>
+            <option value="">(none)</option>
+            {shape.fields.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
+          </select>
+        </div>
+        {chosen && <FieldEditor space={space} field={chosen} value={value[chosen.name]!} onChange={v => setField(chosen.name, v)} disabled={disabled} depth={depth} />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="struct-fields">
+      {shape.fields.map(f => {
+        const v = value[f.name];
+        if (f.optional && v === undefined) {
+          return (
+            <div className="row struct-row" key={f.name}>
+              <span title={typeTitle(space, f)}>{f.name}</span>
+              <label className="struct-optional">
+                <input type="checkbox" checked={false} disabled={disabled} onChange={() => setField(f.name, emptyField(space, f, depth))} /> optional, not set
+              </label>
+            </div>
+          );
+        }
+        return (
+          <div key={f.name}>
+            <FieldEditor space={space} field={f} value={v ?? emptyField(space, f, depth)} onChange={x => setField(f.name, x)} disabled={disabled} depth={depth}
+              onClear={f.optional ? () => setField(f.name, undefined) : undefined} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function typeTitle(space: AddressSpace, f: FieldShape): string {
+  const type = f.kind === 'builtIn' ? f.builtIn! : space.get(f.dataType)?.browseName.name ?? '';
+  return `${type}${f.array ? '[]' : ''}${f.optional ? ', optional' : ''}`;
+}
+
+/** One field: a text for built-in values, a list for enumerations, nested fields for structures; arrays of each. */
+function FieldEditor({ space, field: f, value, onChange, disabled, depth, onClear }: {
+  space: AddressSpace; field: FieldShape; value: FieldValue; onChange: (v: FieldValue) => void; disabled: boolean; depth: number;
+  /** An optional field: leave it out again. */
+  onClear?: () => void;
+}) {
+  const label = (
+    <span title={typeTitle(space, f)}>
+      {onClear && <input type="checkbox" checked disabled={disabled} onChange={onClear} title="Leave this optional field out" />}
+      {f.name}
+    </span>
+  );
+
+  if (f.kind === 'builtIn') {
+    return (
+      <div className="row struct-row">
+        {label}
+        <input value={value as string} disabled={disabled} placeholder={f.array ? `${f.builtIn}; …` : f.builtIn}
+          onChange={e => onChange(e.target.value)} />
+      </div>
+    );
+  }
+
+  if (f.kind === 'enum') {
+    const select = (v: string, set: (v: string) => void) => (
+      <select value={v} disabled={disabled} onChange={e => set(e.target.value)}>
+        {f.enumValues!.map(o => <option key={o.name} value={o.name}>{o.name} ({o.value})</option>)}
+      </select>
+    );
+    if (!f.array) return <div className="row struct-row">{label}{select(value as string, onChange)}</div>;
+    const items = value as string[];
+    return (
+      <div className="struct-nested">
+        <div className="struct-head">{label}{!disabled && <button onClick={() => onChange([...items, f.enumValues![0].name])}>Add</button>}</div>
+        {items.map((v, i) => (
+          <div className="row" key={i}>
+            {select(v, x => onChange(items.map((y, j) => (j === i ? x : y))))}
+            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>Remove</button>}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // A structure: its fields nested; deep levels start folded.
+  if (!f.array) {
+    return (
+      <details className="struct-nested" open={depth < 2}>
+        <summary>{label}</summary>
+        <StructFields space={space} shapeKey={f.dataType!} value={value as StructValue} onChange={onChange} disabled={disabled} depth={depth + 1} />
+      </details>
+    );
+  }
+  const items = value as StructValue[];
+  return (
+    <details className="struct-nested" open={depth < 2}>
+      <summary>{label} <span className="note">{items.length} item(s)</span></summary>
+      {items.map((item, i) => (
+        <div className="struct-item" key={i}>
+          <div className="struct-head">
+            <span>[{i}]</span>
+            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>Remove</button>}
+          </div>
+          <StructFields space={space} shapeKey={f.dataType!} value={item} disabled={disabled} depth={depth + 1}
+            onChange={v => onChange(items.map((x, j) => (j === i ? v : x)))} />
+        </div>
+      ))}
+      {!disabled && <div className="row"><button onClick={() => onChange([...items, emptyStructure(space, f.dataType!, depth + 1)])}>Add item</button></div>}
+    </details>
   );
 }
 
