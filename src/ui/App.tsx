@@ -1,54 +1,92 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { UaModeler } from '../modeler/Modeler';
+import { check, Finding } from '../nodeset/checks';
+import { EditError } from '../nodeset/edit';
 import { NodeClass, text, UaNode } from '../nodeset/model';
 import { Workspace } from '../workspace';
-import { NodeDetails } from './NodeDetails';
+import { NodeEditor } from './NodeEditor';
 
-const TYPE_GROUPS: { nodeClass: NodeClass; title: string }[] = [
+const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType'; title: string }[] = [
   { nodeClass: 'ObjectType', title: 'ObjectTypes' },
   { nodeClass: 'VariableType', title: 'VariableTypes' },
   { nodeClass: 'DataType', title: 'DataTypes' },
   { nodeClass: 'ReferenceType', title: 'ReferenceTypes' },
 ];
 
+type Status = { text: string; warn?: boolean };
+
 export function App() {
   const [workspace, setWorkspace] = useState<Workspace>();
   const [revision, setRevision] = useState(0);
-  const [status, setStatus] = useState<{ text: string; warn?: boolean }>({ text: 'Open a NodeSet2 file, or the DI sample.' });
+  const [status, setStatus] = useState<Status>({ text: 'Start a new model, open a NodeSet2 file, or open the DI sample.' });
   const [filter, setFilter] = useState('');
   const [shown, setShown] = useState<string>();
   const [selected, setSelected] = useState<string>();
   const [showExternal, setShowExternal] = useState(false);
+  const [showFindings, setShowFindings] = useState(false);
+  const [newModelUri, setNewModelUri] = useState<string>();
   const canvasRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<UaModeler>();
+  const fittedFor = useRef<string>();
+  // The redraw reads the selection without redrawing when only the selection changes.
+  const selectedRef = useRef<string>();
+  selectedRef.current = selected;
+  const bump = useCallback(() => setRevision(r => r + 1), []);
 
-  const open = useCallback(async (xml: string, name: string) => {
+  const start = useCallback(async (action: (ws: Workspace) => Promise<{ missing: string[] }>, name: string) => {
     setStatus({ text: `Reading ${name} …` });
     try {
       const ws = new Workspace();
-      const { file, missing } = await ws.open(xml);
+      const { missing } = await action(ws);
       setWorkspace(ws);
-      setRevision(r => r + 1);
       setShown(undefined);
       setSelected(undefined);
+      fittedFor.current = undefined;
+      bump();
+      const file = ws.editable!;
       setStatus(missing.length > 0
-        ? { text: `${name}: ${file.nodes.length} nodes. Missing required models: ${missing.join(', ')}.`, warn: true }
+        ? { text: `${name}: missing required models: ${missing.join(', ')}.`, warn: true }
         : { text: `${name}: ${file.nodes.length} nodes of ${file.models.map(m => m.modelUri).join(', ')}.` });
     } catch (e) {
       setStatus({ text: `${name}: ${(e as Error).message}`, warn: true });
     }
-  }, []);
-
-  const openSample = useCallback(async () => {
-    const di = await import(/* webpackChunkName: "nodeset-di" */ '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml');
-    await open(di.default, 'Opc.Ua.Di.NodeSet2.xml');
-  }, [open]);
+  }, [bump]);
 
   const openFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (file) await open(await file.text(), file.name);
-  }, [open]);
+    if (file) {
+      const xml = await file.text();
+      await start(ws => ws.open(xml), file.name);
+    }
+  }, [start]);
+
+  const openSample = useCallback(async () => {
+    const di = await import(/* webpackChunkName: "nodeset-di" */ '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml');
+    await start(ws => ws.open(di.default), 'Opc.Ua.Di.NodeSet2.xml');
+  }, [start]);
+
+  const createModel = useCallback(async () => {
+    const uri = newModelUri?.trim();
+    if (!uri) return;
+    setNewModelUri(undefined);
+    await start(ws => ws.create(uri), uri);
+  }, [newModelUri, start]);
+
+  /** Runs an edit; an EditError becomes the status line instead of an exception. */
+  const run = useCallback((action: () => unknown) => {
+    try {
+      action();
+      bump();
+      setStatus({ text: 'Changed. Save to keep the NodeSet.' });
+    } catch (e) {
+      if (e instanceof EditError) setStatus({ text: e.message, warn: true });
+      else throw e;
+    }
+  }, [bump]);
+
+  const undo = useCallback(() => { workspace?.editor?.undo(); bump(); }, [workspace, bump]);
+  const redo = useCallback(() => { workspace?.editor?.redo(); bump(); }, [workspace, bump]);
 
   const save = useCallback(() => {
     if (!workspace?.editable) return;
@@ -59,28 +97,64 @@ export function App() {
     a.download = `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
     a.click();
     URL.revokeObjectURL(a.href);
+    setStatus({ text: `Saved ${a.download}.` });
   }, [workspace]);
+
+  // Undo and redo from the keyboard, except while typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = (e.target as HTMLElement)?.closest('input, textarea, select');
+      if (typing || !(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'z') { e.preventDefault(); undo(); }
+      if (e.key === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
 
   // The canvas lives as long as the workspace.
   useEffect(() => {
     if (!workspace || !canvasRef.current) return;
-    const modeler = new UaModeler(canvasRef.current, workspace.space);
-    modeler.onSelect(setSelected);
+    const modeler = new UaModeler(canvasRef.current, () => workspace.space);
+    modeler.onSelect(key => { if (key) setSelected(key); });
     modeler.onOpen(key => {
       const node = workspace.space.get(key);
-      if (node && node.nodeClass.endsWith('Type')) setShown(key);
+      if (node?.nodeClass.endsWith('Type')) setShown(key);
+      else { const t = node && workspace.space.typeDefinition(node); if (t) setShown(t.id); }
+    });
+    modeler.onMoved(moved => {
+      const diagram = modeler.current?.root;
+      if (!diagram) return;
+      for (const m of moved) workspace.place(diagram, m.nodeKey, m.x, m.y);
+      bump();
     });
     modelerRef.current = modeler;
     return () => { modeler.destroy(); modelerRef.current = undefined; };
-  }, [workspace]);
+  }, [workspace, bump]);
 
+  // Redraw after every change; fit only when another type is shown.
   useEffect(() => {
-    if (!shown || !modelerRef.current) return;
-    const d = modelerRef.current.showType(shown, { ownNamespaces: workspace?.ownNamespaces });
-    modelerRef.current.fit();
-    setSelected(shown);
-    if (d.truncated) setStatus({ text: 'Deeper declarations are left out; double-click a type to open it.' });
+    const modeler = modelerRef.current;
+    if (!modeler || !workspace) return;
+    if (!shown || !workspace.space.get(shown)) {
+      modeler.diagram.clear();
+      if (shown) setShown(undefined);
+      return;
+    }
+    const d = modeler.showType(shown, { ownNamespaces: workspace.ownNamespaces, positions: workspace.layout.get(shown) });
+    if (fittedFor.current !== shown) {
+      modeler.fit();
+      fittedFor.current = shown;
+      if (d.truncated) setStatus({ text: 'Deeper declarations are left out; double-click a node to open its type.' });
+    }
+    modeler.select(selectedRef.current);
   }, [shown, workspace, revision]);
+
+  useEffect(() => { modelerRef.current?.select(selected); }, [selected]);
+
+  const findings = useMemo<Finding[]>(
+    () => (workspace?.editable ? check(workspace.space, workspace.editable) : []),
+    [workspace, revision]);
 
   const types = useMemo(() => {
     if (!workspace) return [];
@@ -88,21 +162,60 @@ export function App() {
     const needle = filter.trim().toLowerCase();
     return TYPE_GROUPS.map(g => ({
       ...g,
-      nodes: workspace.space.ofClass(g.nodeClass)
+      nodes: workspace.space.ofClass(g.nodeClass as NodeClass)
         .filter(n => showExternal || own.has(n.browseName.namespaceUri))
         .filter(n => !needle || label(n).toLowerCase().includes(needle))
         .sort((a, b) => label(a).localeCompare(label(b))),
       own,
-    })).filter(g => g.nodes.length > 0);
+    }));
   }, [workspace, filter, showExternal, revision]);
+
+  const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
+    const name = window.prompt(`Name of the new ${nodeClass}`);
+    if (!name || !workspace?.editor) return;
+    run(() => {
+      const key = workspace.editor!.addType(nodeClass, name);
+      setShown(key);
+      setSelected(key);
+    });
+  };
+
+  const goTo = (f: Finding) => {
+    if (!workspace) return;
+    let owner = workspace.space.get(f.node);
+    for (let i = 0; owner && !owner.nodeClass.endsWith('Type') && i < 50; i++) owner = workspace.space.parentOf(owner);
+    if (owner) setShown(owner.id);
+    setSelected(f.node);
+  };
+
+  const editor = workspace?.editor;
+  const errors = findings.filter(f => f.severity === 'error').length;
 
   return (
     <div className="app">
       <div className="toolbar">
         <span className="title">OPC UA Modeler</span>
+        {newModelUri === undefined
+          ? <button onClick={() => setNewModelUri('http://example.org/MyModel/')}>New model…</button>
+          : (
+            <span className="inline-form">
+              <input autoFocus size={36} value={newModelUri} onChange={e => setNewModelUri(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') createModel(); if (e.key === 'Escape') setNewModelUri(undefined); }} />
+              <button onClick={createModel}>Create</button>
+              <button onClick={() => setNewModelUri(undefined)}>Cancel</button>
+            </span>
+          )}
         <label className="button">Open NodeSet…<input type="file" accept=".xml" onChange={openFile} /></label>
         <button onClick={openSample}>Open DI sample</button>
         <button onClick={save} disabled={!workspace?.editable}>Save NodeSet</button>
+        <span className="sep" />
+        <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">Undo</button>
+        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">Redo</button>
+        {shown && <button onClick={() => { workspace?.resetLayout(shown); bump(); }}>Reset layout</button>}
+        <span className="sep" />
+        <button className={errors > 0 ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
+          Checks: {errors} error(s), {findings.length - errors} warning(s)
+        </button>
         <label style={{ marginLeft: 'auto', fontSize: 13 }}>
           <input type="checkbox" checked={showExternal} onChange={e => setShowExternal(e.target.checked)} /> Types of required models
         </label>
@@ -112,13 +225,16 @@ export function App() {
           <input className="filter" placeholder="Filter types" value={filter} onChange={e => setFilter(e.target.value)} />
           {types.map(g => (
             <div key={g.nodeClass}>
-              <div className="group">{g.title} ({g.nodes.length})</div>
+              <div className="group">
+                {g.title} ({g.nodes.length})
+                {editor && <button className="add-type" title={`New ${g.nodeClass}`} onClick={() => addType(g.nodeClass)}>+</button>}
+              </div>
               {g.nodes.map(n => (
                 <div
                   key={n.id}
                   className={`item${n.id === shown ? ' active' : ''}${g.own.has(n.browseName.namespaceUri) ? '' : ' external'}`}
                   title={n.id}
-                  onClick={() => setShown(n.id)}
+                  onClick={() => { setShown(n.id); setSelected(n.id); }}
                 >
                   {n.isAbstract ? <em>{label(n)}</em> : label(n)}
                 </div>
@@ -127,11 +243,27 @@ export function App() {
           ))}
           {!workspace && <div className="empty">No model open.</div>}
         </div>
-        <div className="canvas"><div ref={canvasRef} /></div>
-        <div className="side right details">
-          {workspace && selected ? <NodeDetails space={workspace.space} nodeKey={selected} /> : <div className="empty">Select a node.</div>}
+        <div className="canvas">
+          <div ref={canvasRef} />
+          {workspace && !shown && <div className="hint">Pick a type on the left, or add one with +.</div>}
+        </div>
+        <div className="side right">
+          {workspace && editor && selected && workspace.space.get(selected)
+            ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
+                onOpenType={key => { setShown(key); setSelected(key); }} onCreated={key => setSelected(key)} />
+            : <div className="empty">Select a node.</div>}
         </div>
       </div>
+      {showFindings && (
+        <div className="findings">
+          {findings.length === 0 && <div className="empty">No findings.</div>}
+          {findings.map((f, i) => (
+            <div key={i} className={`finding ${f.severity}`} onClick={() => goTo(f)}>
+              <span className="rule">{f.rule}</span> {f.message}
+            </div>
+          ))}
+        </div>
+      )}
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
     </div>
   );

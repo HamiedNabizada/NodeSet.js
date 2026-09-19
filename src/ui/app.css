@@ -32,3 +32,36 @@ html, body, #root { margin: 0; height: 100%; }
 .details td { padding: 2px 4px; vertical-align: top; border-bottom: 1px solid #eaeef2; }
 .details td:first-child { color: var(--muted); white-space: nowrap; }
 .empty { color: var(--muted); font-size: 13px; padding: 20px; }
+.app { grid-template-rows: auto 1fr auto auto; }
+.toolbar button:disabled { opacity: .5; cursor: default; }
+.toolbar button.warn { border-color: #d4a72c; }
+.toolbar .sep { width: 1px; height: 20px; background: var(--line); }
+.inline-form { display: inline-flex; gap: 4px; }
+.inline-form input { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; }
+.group { display: flex; align-items: center; }
+.add-type { margin-left: auto; border: 1px solid var(--line); background: #fff; border-radius: 4px; cursor: pointer; line-height: 1; padding: 1px 6px; }
+.hint { position: absolute; top: 40%; width: 100%; text-align: center; color: var(--muted); pointer-events: none; }
+.editor h3 { margin: 4px 0 8px; font-size: 15px; }
+.editor .kind { font-weight: normal; font-size: 12px; color: var(--muted); margin-left: 6px; }
+.editor .note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.field { display: grid; grid-template-columns: 96px 1fr; gap: 6px; align-items: start; margin: 5px 0; font-size: 13px; }
+.field > span { color: var(--muted); padding-top: 4px; }
+.field > div { display: flex; gap: 4px; min-width: 0; }
+.field input:not([type=checkbox]), .field select, .field textarea { flex: 1; min-width: 0; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
+.field input:disabled, .field select:disabled, .field textarea:disabled { background: #f6f8fa; color: var(--muted); }
+.mono { font-family: Consolas, monospace; padding-top: 4px; }
+button.link { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0 2px; font: inherit; }
+fieldset.add { border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; padding: 6px 8px 8px; display: grid; gap: 5px; font-size: 13px; }
+fieldset.add legend { color: var(--muted); }
+fieldset.add select, fieldset.add input { font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
+fieldset.add .row { display: flex; gap: 4px; }
+fieldset.add .row input { flex: 1; min-width: 0; }
+.actions { display: flex; gap: 6px; margin-top: 10px; }
+.actions button, fieldset.add button { font: inherit; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+.actions button.danger { color: #cf222e; border-color: #f0c0c4; }
+.findings { max-height: 160px; overflow: auto; border-top: 1px solid var(--line); font-size: 12px; }
+.finding { padding: 3px 10px; cursor: pointer; }
+.finding:hover { background: #eaeef2; }
+.finding.error .rule { color: #cf222e; }
+.finding.warning .rule { color: #9a6700; }
+.finding .rule { font-family: Consolas, monospace; margin-right: 6px; }
