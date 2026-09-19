@@ -1,0 +1,115 @@
+{
+  "model": "http://opcfoundation.org/UA/DI/",
+  "cases": [
+    {
+      "type": "SoftwareVersionType",
+      "optional": [],
+      "children": [
+        "Manufacturer",
+        "ManufacturerUri",
+        "SoftwareRevision"
+      ]
+    },
+    {
+      "type": "SoftwareVersionType",
+      "optional": [
+        "ReleaseDate",
+        "PatchIdentifiers"
+      ],
+      "children": [
+        "Manufacturer",
+        "ManufacturerUri",
+        "PatchIdentifiers",
+        "ReleaseDate",
+        "SoftwareRevision"
+      ]
+    },
+    {
+      "type": "SoftwareType",
+      "optional": [],
+      "children": [
+        "Manufacturer",
+        "Model",
+        "SoftwareRevision"
+      ]
+    },
+    {
+      "type": "ConfigurableObjectType",
+      "optional": [],
+      "children": [
+        "SupportedTypes"
+      ]
+    },
+    {
+      "type": "LockingServicesType",
+      "optional": [],
+      "children": [
+        "BreakLock",
+        "BreakLock/OutputArguments",
+        "ExitLock",
+        "ExitLock/OutputArguments",
+        "InitLock",
+        "InitLock/InputArguments",
+        "InitLock/OutputArguments",
+        "Locked",
+        "LockingClient",
+        "LockingUser",
+        "RemainingLockTime",
+        "RenewLock",
+        "RenewLock/OutputArguments"
+      ]
+    },
+    {
+      "type": "TransferServicesType",
+      "optional": [],
+      "children": [
+        "FetchTransferResultData",
+        "FetchTransferResultData/InputArguments",
+        "FetchTransferResultData/OutputArguments",
+        "TransferFromDevice",
+        "TransferFromDevice/OutputArguments",
+        "TransferToDevice",
+        "TransferToDevice/OutputArguments"
+      ]
+    },
+    {
+      "type": "NetworkType",
+      "optional": [
+        "Lock"
+      ],
+      "children": [
+        "Lock",
+        "Lock/BreakLock",
+        "Lock/BreakLock/OutputArguments",
+        "Lock/ExitLock",
+        "Lock/ExitLock/OutputArguments",
+        "Lock/InitLock",
+        "Lock/InitLock/InputArguments",
+        "Lock/InitLock/OutputArguments",
+        "Lock/Locked",
+        "Lock/LockingClient",
+        "Lock/LockingUser",
+        "Lock/RemainingLockTime",
+        "Lock/RenewLock",
+        "Lock/RenewLock/OutputArguments"
+      ]
+    },
+    {
+      "type": "FunctionalGroupType",
+      "optional": [],
+      "children": []
+    },
+    {
+      "type": "SoftwareUpdateType",
+      "optional": [],
+      "children": []
+    },
+    {
+      "type": "ConnectionPointType",
+      "optional": [],
+      "children": [
+        "NetworkAddress"
+      ]
+    }
+  ]
+}

@@ -44,6 +44,12 @@ Added after M6, from a review of what was missing:
   themselves, and arrays of structures as the value of a Variable. The panel
   edits them as nested fields; deep levels start folded.
 
+- The instantiation rules are checked against cases shared with the AMLOpcUa
+  plugin, which implements them a second time in C# (`tests/shared/instantiation.json`,
+  read by both test suites; `UPDATE_SHARED=1 npm test` rewrites it from this
+  implementation). The first run found that the plugin instantiated children
+  without a ModellingRule (DefaultInstanceBrowseName); it no longer does.
+
 Not done: structure fields that allow subtypes (their values name their own
 type), matrices, a test inside the AutomationML Editor itself.
 
