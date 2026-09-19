@@ -146,6 +146,31 @@ entry for the core's dependencies in its `deps.json`; the OPC UA stack then
 failed in a type initializer, while the plugin works in the editor, which
 loads it with its own `deps.json`. The probe references the core directly.
 
+## AutomationML Editor plugins (from AMLOpcUa)
+
+**One status bar for all tabs.** The OPC UA plugin had its status line and
+progress bar inside the first tab; a mirror started in the Server tab
+reported into a tab nobody looked at. A status bar below the TabControl is
+seen from every tab.
+*FPB plugin:* worth checking wherever a tab reports progress.
+
+**First steps instead of an empty list.** A document without the plugin's
+content shows cards for the three or four ways in (import, search, connect,
+model). Users who open the plugin for the first time see what it is for.
+
+**Screenshots of a WPF plugin without the editor.** A probe hosts the plugin
+control in a window, drives it (`RaiseEvent` for clicks, a DispatcherTimer
+to answer modal dialogs) and renders each tab with `RenderTargetBitmap`.
+WebView2 content is an HWND and does not appear in such a picture.
+*FPB plugin:* the same probe would show every view after a change.
+
+**Aml.Engine wraps anew on every access.** Two reads of the same element give
+two wrapper objects; compare IDs, not references (`Assert.Same` fails).
+
+**Keep a selection where its result lives.** The part of a server mirrored
+into a hierarchy is stored as an attribute at the element that stands for
+the server, so "mirror again" needs neither settings nor a new selection.
+
 ## Tooling
 
 **Big data as lazy chunks.** The 4 MB base NodeSet is an `asset/source`
