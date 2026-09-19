@@ -4,6 +4,7 @@ import { REF } from '../nodeset/address-space';
 import { check, Finding } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
+import { HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { NodeEditor } from './NodeEditor';
 
@@ -34,14 +35,21 @@ export function App() {
   // The redraw reads the selection without redrawing when only the selection changes.
   const selectedRef = useRef<string>();
   selectedRef.current = selected;
+  const [dirty, setDirty] = useState(false);
+  // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
+  const host = useMemo(() => HostBridge.detect(), []);
   const bump = useCallback(() => setRevision(r => r + 1), []);
+  const changed = useCallback(() => { setRevision(r => r + 1); setDirty(true); }, []);
 
-  const start = useCallback(async (action: (ws: Workspace) => Promise<{ missing: string[] }>, name: string) => {
+  const start = useCallback(async (action: (ws: Workspace) => Promise<unknown>, name: string, required: string[] = []) => {
     setStatus({ text: `Reading ${name} …` });
     try {
       const ws = new Workspace();
-      const { missing } = await action(ws);
+      await action(ws);
+      for (const xml of required) await ws.addRequired(xml);
+      const missing = ws.missing;
       setWorkspace(ws);
+      setDirty(false);
       setShown(undefined);
       setSelected(undefined);
       fittedFor.current = undefined;
@@ -80,16 +88,37 @@ export function App() {
   const run = useCallback((action: () => unknown) => {
     try {
       action();
-      bump();
+      changed();
       setStatus({ text: 'Changed. Save to keep the NodeSet.' });
     } catch (e) {
       if (e instanceof EditError) setStatus({ text: e.message, warn: true });
       else throw e;
     }
-  }, [bump]);
+  }, [changed]);
 
-  const undo = useCallback(() => { workspace?.editor?.undo(); bump(); }, [workspace, bump]);
-  const redo = useCallback(() => { workspace?.editor?.redo(); bump(); }, [workspace, bump]);
+  const undo = useCallback(() => { workspace?.editor?.undo(); changed(); }, [workspace, changed]);
+  const redo = useCallback(() => { workspace?.editor?.redo(); changed(); }, [workspace, changed]);
+
+  const apply = useCallback(() => {
+    if (!host || !workspace?.editable) return;
+    host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '' });
+    setDirty(false);
+    setStatus({ text: 'Sent to the document.' });
+  }, [host, workspace]);
+
+  // Messages from the host, and "ready" once the modeler listens.
+  useEffect(() => {
+    if (!host) return;
+    const stop = host.listen((m: HostToModeler) => {
+      if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
+      if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
+    });
+    host.post({ type: 'ready', version: '0.1.0' });
+    return stop;
+  }, [host, start]);
+
+  useEffect(() => { host?.post({ type: 'dirty', dirty }); }, [host, dirty]);
+  useEffect(() => { host?.post({ type: 'status', text: status.text, warn: status.warn }); }, [host, status]);
 
   const save = useCallback(() => {
     if (!workspace?.editable) return;
@@ -100,6 +129,7 @@ export function App() {
     a.download = `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
     a.click();
     URL.revokeObjectURL(a.href);
+    setDirty(false);
     setStatus({ text: `Saved ${a.download}.` });
   }, [workspace]);
 
@@ -129,11 +159,11 @@ export function App() {
       const diagram = modeler.current?.root;
       if (!diagram) return;
       for (const m of moved) workspace.place(diagram, m.nodeKey, m.x, m.y);
-      bump();
+      changed();
     });
     modelerRef.current = modeler;
     return () => { modeler.destroy(); modelerRef.current = undefined; };
-  }, [workspace, bump]);
+  }, [workspace, changed]);
 
   // Redraw after every change; fit only when another type is shown.
   useEffect(() => {
@@ -219,12 +249,13 @@ export function App() {
             </span>
           )}
         <label className="button">Open NodeSet…<input type="file" accept=".xml" onChange={openFile} /></label>
-        <button onClick={openSample}>Open DI sample</button>
-        <button onClick={save} disabled={!workspace?.editable}>Save NodeSet</button>
+        {!host && <button onClick={openSample}>Open DI sample</button>}
+        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>Apply to document</button>}
+        <button onClick={save} disabled={!workspace?.editable}>Save NodeSet{dirty ? ' *' : ''}</button>
         <span className="sep" />
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">Undo</button>
         <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">Redo</button>
-        {shown && <button onClick={() => { workspace?.resetLayout(shown); bump(); }}>Reset layout</button>}
+        {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>Reset layout</button>}
         <span className="sep" />
         <button className={errors > 0 ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
           Checks: {errors} error(s), {findings.length - errors} warning(s)

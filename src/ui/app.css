@@ -84,3 +84,4 @@ fieldset.add label.check { display: flex; gap: 6px; align-items: center; font-si
 /* Grid items take the width of their content by default; long option texts would push them out. */
 fieldset.add > *, fieldset.add .row > * { min-width: 0; }
 fieldset.add > select, fieldset.add .row > select { max-width: 100%; }
+.toolbar button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }

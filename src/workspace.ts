@@ -104,6 +104,15 @@ export class Workspace {
     this.layout.delete(diagram);
   }
 
+  /** Models the editable file requires that are not loaded. */
+  get missing(): string[] {
+    const file = this.editable;
+    if (!file) return [];
+    const own = new Set(file.models.map(m => m.modelUri));
+    return [...new Set(file.models.flatMap(m => m.requiredModels.map(r => r.modelUri)))]
+      .filter(uri => uri !== UA_NAMESPACE && !own.has(uri) && !this.loaded.has(uri));
+  }
+
   /** The namespaces of the editable file's own models. */
   get ownNamespaces(): string[] {
     return this.editable?.models.map(m => m.modelUri) ?? [];
