@@ -73,6 +73,17 @@ unreadable; below zoom 0.75 the modeler shows 1:1 from the top left instead.
 package ships `.d.ts` files. `BaseRenderer` subclasses must accept
 `businessObject` as optional.
 
+## Panels
+
+**Grid and flex items need `min-width: 0`.** Their default minimum is their
+content, so a `<select>` with long option texts pushes a whole panel section
+out of its column. One rule for the panel's form containers fixes every case.
+
+**Structured values are drafts, applied as one step.** Method arguments and
+DataType fields are edited as a list in the panel and applied with one
+button, which is one undo step and one validation, instead of an edit per
+keystroke.
+
 ## Tooling
 
 **Big data as lazy chunks.** The 4 MB base NodeSet is an `asset/source`

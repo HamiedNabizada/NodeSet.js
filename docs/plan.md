@@ -14,9 +14,9 @@ rules, checks, NodeSet in and out.
 |---|---|---|
 | M0 | Repository, toolchain (TypeScript, webpack, vitest, diagram-js, React) | done |
 | M1 | NodeSet2 core: read and write losslessly, address space across models, type queries | done |
-| M2 | Canvas in the notation of OPC 10000-3 Annex C, automatic layout, layout stored in the NodeSet | |
-| M3 | Editing: palette, properties panel, checks, save | |
-| M4 | Instances by ModellingRule | |
+| M2 | Canvas in the notation of OPC 10000-3 Annex C, automatic layout, layout stored in the NodeSet | done |
+| M3 | Editing: properties panel, arguments, fields, references, checks, undo, save | done |
+| M4 | Instances by ModellingRule | done |
 | M5 | Embedding in the AMLOpcUa plugin through WebView2, exchange with the C# core | |
 | M6 | Library build, standalone build, documentation | |
 
