@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDraft } from './drafts';
+import { MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
 import { Argument, text, uaKey, UaNode } from '../nodeset/model';
@@ -303,6 +304,100 @@ function FieldEditor({ space, field: f, value, onChange, disabled, depth, onClea
 
 /** References that are not part of the hierarchy, the type system or the modelling rules. */
 const STRUCTURAL = new Set<string>([REF.HasTypeDefinition, REF.HasModellingRule, REF.HasSubtype, uaKey(38) /* HasEncoding */]);
+
+/**
+ * The states and transitions of a finite state machine type, and the machine
+ * as a state chart. Adding, renaming and deleting go through the editor, so
+ * every step is one undo.
+ */
+export function StateMachineSection({ space, editor, type, run, onSelect }: {
+  space: AddressSpace; editor: ModelEditor; type: UaNode; run: Run; onSelect: (key: string) => void;
+}) {
+  const machine = useMemo(() => readStateMachine(space, type), [space, type]);
+  const [state, setState] = useState('');
+  const [transition, setTransition] = useState({ name: '', from: '', to: '', cause: '' });
+  const methods = useMemo(() => space.children(type).filter(c => c.node.nodeClass === 'Method').map(c => c.node), [space, type]);
+  const chart = useMemo(() => stateChartSvg(machine), [machine]);
+
+  return (
+    <fieldset className="add">
+      <legend>State machine</legend>
+      {machine.states.length === 0 && <div className="hint-text">No states yet. A machine needs its states first, then the transitions between them.</div>}
+      {machine.states.length > 0 && (
+        <table className="grid">
+          <thead><tr><th>State</th><th>No.</th><th /></tr></thead>
+          <tbody>
+            {machine.states.map(s => (
+              <tr key={s.key}>
+                <td><button className="link" onClick={() => onSelect(s.key)}>{s.name}</button></td>
+                <td>{s.number ?? ''}</td>
+                <td><button title="Remove" onClick={() => run(() => editor.delete(s.key))}>×</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="row">
+        <input placeholder="New state" value={state} onChange={e => setState(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && state.trim()) { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); } }} />
+        <button disabled={!state.trim()} onClick={() => { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); }}>Add state</button>
+      </div>
+
+      {machine.transitions.length > 0 && (
+        /* A list, not a table: the panel is too narrow for four columns of names. */
+        <ul className="machine">
+          {machine.transitions.map(t => (
+            <li key={t.key}>
+              <button className="link" onClick={() => onSelect(t.key)}>{t.name}</button>
+              <span className="ends">{ends(machine, t)}{t.causeName ? ` / ${t.causeName}()` : ''}</span>
+              <button title="Remove" onClick={() => run(() => editor.delete(t.key))}>×</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {machine.states.length >= 1 && (
+        <div className="row wrap">
+          <input placeholder="New transition" value={transition.name} onChange={e => setTransition({ ...transition, name: e.target.value })} />
+          <select value={transition.from} onChange={e => setTransition({ ...transition, from: e.target.value })}>
+            <option value="">from …</option>
+            {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+          </select>
+          <select value={transition.to} onChange={e => setTransition({ ...transition, to: e.target.value })}>
+            <option value="">to …</option>
+            {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+          </select>
+          <select value={transition.cause} onChange={e => setTransition({ ...transition, cause: e.target.value })}>
+            <option value="">caused by …</option>
+            {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
+          </select>
+          <button
+            disabled={!transition.name.trim() || !transition.from || !transition.to}
+            onClick={() => {
+              run(() => editor.addTransition(type.id, transition.name.trim(), nextNumber(machine.transitions), transition.from, transition.to,
+                transition.cause || undefined));
+              setTransition({ name: '', from: '', to: '', cause: '' });
+            }}
+          >Add transition</button>
+        </div>
+      )}
+      {chart && (
+        <details open>
+          <summary>State chart</summary>
+          <div className="chart" dangerouslySetInnerHTML={{ __html: chart }} />
+        </details>
+      )}
+    </fieldset>
+  );
+}
+
+function nameOf(machine: StateMachine, key: string | undefined): string {
+  return machine.states.find(s => s.key === key)?.name ?? (key ? '?' : '');
+}
+
+/** Both ends of a transition in one cell, so the narrow panel still shows them. */
+function ends(machine: StateMachine, t: MachineTransition): string {
+  return `${nameOf(machine, t.from) || '…'} → ${nameOf(machine, t.to) || '…'}`;
+}
 
 export function ReferencesSection({ space, editor, node, run }: { space: AddressSpace; editor: ModelEditor; node: UaNode; run: Run }) {
   const refs = space.out(node.id).filter(e => !STRUCTURAL.has(e.type) && !space.isHierarchical(e.type));

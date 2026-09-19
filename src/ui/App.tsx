@@ -299,6 +299,18 @@ export function App() {
     });
   };
 
+  const addStateMachine = () => {
+    if (!workspace?.editor) return;
+    setAsk({
+      title: 'Name of the new state machine type',
+      onOk: name => run(() => {
+        const key = workspace.editor!.addStateMachineType(name);
+        setShown(key);
+        setSelected(key);
+      }),
+    });
+  };
+
   const goTo = (f: Finding) => {
     if (!workspace) return;
     let owner = workspace.space.get(f.node);
@@ -348,6 +360,9 @@ export function App() {
             <div key={g.nodeClass}>
               <div className="group">
                 {g.title} ({g.nodes.length})
+                {editor && g.nodeClass === 'ObjectType' && (
+                  <button className="add-type" title="New state machine type (OPC 10000-5 Annex B)" onClick={addStateMachine}>+ machine</button>
+                )}
                 {editor && <button className="add-type" title={`New ${g.nodeClass}`} onClick={() => addType(g.nodeClass)}>+</button>}
               </div>
               {g.nodes.map(n => (

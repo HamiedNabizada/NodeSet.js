@@ -9,7 +9,8 @@ import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
 import { builtInOf, valueText } from '../nodeset/values';
 import { structShape, structureValues } from '../nodeset/structures';
 import { addSignals, parseSignals } from '../nodeset/csv';
-import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StructureValueSection } from './Sections';
+import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
+import { isStateMachineType } from '../nodeset/statemachine';
 
 const RULES: [string, string][] = [
   ['', '(none)'],
@@ -109,6 +110,9 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       )}
       {own && node.nodeClass === 'Method' && <ArgumentsSection space={space} editor={editor} method={node} run={run} />}
       {own && node.nodeClass === 'DataType' && <FieldsSection space={space} editor={editor} dataType={node} run={run} />}
+      {own && isStateMachineType(space, node) && (
+        <StateMachineSection space={space} editor={editor} type={node} run={run} onSelect={onCreated} />
+      )}
       {own && canHoldChildren(node.nodeClass) && (
         <AddChild editor={editor} parent={nodeKey} run={run} onCreated={onCreated} declaration={isType || insideType(space, node)} />
       )}

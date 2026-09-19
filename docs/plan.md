@@ -63,7 +63,7 @@ Added after M6, from a review of what was missing:
   without closing. Structure values escape the
   namespace URI and leave out types whose names XML cannot carry.
 
-- A catalogue of rules on the NodeSet itself (`checks.ts`, M001 to M019):
+- A catalogue of rules on the NodeSet itself (`checks.ts`, M001 to M021):
   besides the earlier ones on types and instances, a NodeId in a namespace the
   model does not own, ValueRank against ArrayDimensions, a method argument of
   an unknown DataType, a placeholder not named <like this>, a node held by
@@ -71,6 +71,17 @@ Added after M6, from a review of what was missing:
   values of the same number, a symmetric ReferenceType with an InverseName, and
   a node no reference leads to. Each finding carries its rule; the rule's
   sentence is its tooltip.
+
+- Finite state machines (OPC 10000-5 Annex B): "+ machine" adds an ObjectType
+  below FiniteStateMachineType; its panel then holds the states and the
+  transitions between them, each with its number, its ends and the method that
+  causes it, and draws the machine as a state chart (`statemachine.ts`,
+  `ModelEditor.addState`/`addTransition`/`setTransition`). States and
+  transitions are written as the base model writes its own: components with a
+  type definition of StateType or TransitionType, a Mandatory StateNumber or
+  TransitionNumber in the UA namespace, FromState, ToState and HasCause in both
+  directions, and no ModellingRule of their own. M020 finds a transition
+  missing an end, M021 a number given twice or not at all.
 
 - Variables from a signal list: "Variables from CSV…" on a type or object of
   the model reads a CSV file (comma, semicolon or tab, header row; columns

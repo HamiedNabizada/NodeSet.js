@@ -7,7 +7,7 @@
 // Undo and redo work on snapshots of the file, which is simple and cheap at
 // the size of information models.
 
-import { AddressSpace, REF, RULE } from './address-space';
+import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
 import { builtInOf, structureOf, structureValue, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
@@ -519,6 +519,114 @@ export class ModelEditor {
     const types = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
     p.valueXml = `<ListOfLocalizedText xmlns="${types}">${Array.from(names, n => (n === undefined ? '<LocalizedText />'
       : `<LocalizedText><Text>${escapeXml(n)}</Text></LocalizedText>`)).join('')}</ListOfLocalizedText>`;
+  }
+
+  // ── state machines (OPC 10000-5 Annex B) ──────────────────────────────
+  //
+  // A state machine type holds its available states and transitions as
+  // components. They carry no ModellingRule, as the base model's own machines
+  // show; their StateNumber and TransitionNumber properties do, and their
+  // BrowseNames belong to the UA namespace. A transition names its ends with
+  // FromState and ToState, the method that causes it with HasCause.
+
+  /** An ObjectType that is a finite state machine. */
+  addStateMachineType(name: string): string {
+    return this.addType('ObjectType', name, SM.FiniteStateMachineType);
+  }
+
+  /** A state of a machine type, numbered as the type's states are counted. */
+  addState(type: string, name: string, number: number): string {
+    return this.change(() => {
+      const t = this.machineType(type);
+      const s = this.namedChild(t, name, 'Object', SM.StateType);
+      this.numberProperty(s, SM.StateNumber, number);
+      return s.id;
+    });
+  }
+
+  /** A transition between two states of the same machine type. */
+  addTransition(type: string, name: string, number: number, from: string, to: string, cause?: string): string {
+    return this.change(() => {
+      const t = this.machineType(type);
+      const s = this.namedChild(t, name, 'Object', SM.TransitionType);
+      this.numberProperty(s, SM.TransitionNumber, number);
+      this.transitionEnd(s, SM.FromState, from);
+      this.transitionEnd(s, SM.ToState, to);
+      if (cause) this.transitionEnd(s, SM.HasCause, cause);
+      return s.id;
+    });
+  }
+
+  /**
+   * Changes where a transition leads and what causes it. A field that is
+   * there but undefined removes that reference; a field left out keeps it.
+   */
+  setTransition(transition: string, ends: { from?: string; to?: string; cause?: string }): void {
+    this.change(() => {
+      const s = this.node(transition);
+      if ('from' in ends) this.transitionEnd(s, SM.FromState, ends.from);
+      if ('to' in ends) this.transitionEnd(s, SM.ToState, ends.to);
+      if ('cause' in ends) this.transitionEnd(s, SM.HasCause, ends.cause);
+    });
+  }
+
+  private machineType(key: string): UaNode {
+    const t = this.node(key);
+    if (!this.space().isSubtypeOf(t.id, SM.FiniteStateMachineType)) {
+      throw new EditError(`'${t.browseName.name}' is no finite state machine; its type does not derive from FiniteStateMachineType.`);
+    }
+    return t;
+  }
+
+  /** A component of the machine type with its own name and type definition. */
+  private namedChild(parent: UaNode, name: string, nodeClass: NodeClass, typeDefinition: string): UaNode {
+    const trimmed = name.trim();
+    if (this.space().children(parent).some(c => c.node.browseName.name === trimmed)) {
+      throw new EditError(`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
+    }
+    const n = this.create(nodeClass, trimmed);
+    parent.references.push({ type: REF.HasComponent, isForward: true, target: n.id });
+    n.references.push(
+      { type: REF.HasComponent, isForward: false, target: parent.id },
+      { type: REF.HasTypeDefinition, isForward: true, target: typeDefinition },
+    );
+    n.parent = parent.id;
+    return n;
+  }
+
+  /** StateNumber or TransitionNumber: a Mandatory UInt32 property of the UA namespace. */
+  private numberProperty(owner: UaNode, name: string, value: number): void {
+    const p = this.create('Variable', name);
+    p.browseName = { namespaceUri: UA_NAMESPACE, name };
+    owner.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
+    p.references.push(
+      { type: REF.HasProperty, isForward: false, target: owner.id },
+      { type: REF.HasTypeDefinition, isForward: true, target: uaKey(68) },
+      { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
+    );
+    p.parent = owner.id;
+    p.dataType = uaKey(7);
+    p.valueRank = -1;
+    p.valueXml = valueXml('UInt32', String(Math.trunc(value)), false);
+  }
+
+  /** One FromState, ToState or HasCause of a transition, with the inverse on the other node. */
+  private transitionEnd(transition: UaNode, type: string, target: string | undefined): void {
+    for (const old of transition.references.filter(r => r.type === type && r.isForward)) {
+      const node = this.file.nodes.find(n => n.id === old.target);
+      if (node) node.references = node.references.filter(r => !(r.type === type && !r.isForward && r.target === transition.id));
+    }
+    transition.references = transition.references.filter(r => !(r.type === type && r.isForward));
+    if (!target) return;
+    const node = this.space().get(target);
+    if (!node) throw new EditError('The node of the reference is unknown.');
+    if (type !== SM.HasCause && !this.space().isSubtypeOf(node.references.find(r => r.type === REF.HasTypeDefinition)?.target ?? '', SM.StateType)) {
+      throw new EditError(`'${node.browseName.name}' is no state of this machine.`);
+    }
+    if (type === SM.HasCause && node.nodeClass !== 'Method') throw new EditError(`'${node.browseName.name}' is no method.`);
+    transition.references.push({ type, isForward: true, target });
+    const own = this.file.nodes.find(n => n.id === target);
+    if (own) own.references.push({ type, isForward: false, target: transition.id });
   }
 
   /** A property of a DataType from the UA namespace (EnumStrings, OptionSetValues …), created if missing. */

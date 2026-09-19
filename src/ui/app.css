@@ -171,3 +171,21 @@ fieldset.add .row.struct-row > span input[type=checkbox] { margin: 0 4px 0 0; ve
 .ask input { background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 5px 6px; font: inherit; }
 .ask-problem { color: var(--danger); font-size: 13px; }
 .ask-buttons { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* The state machine section: its lists and the state chart. */
+.grid { border-collapse: collapse; width: 100%; font-size: 13px; margin: 4px 0; table-layout: fixed; }
+.grid td, .grid th { overflow: hidden; overflow-wrap: anywhere; }
+.grid td:first-child, .grid th:first-child { width: 42%; }
+.grid td:last-child { width: 26px; text-align: center; }
+.grid th, .grid td { border: 1px solid var(--line); padding: 2px 6px; text-align: left; }
+.grid th { background: var(--panel); font-weight: 600; }
+.row.wrap { flex-wrap: wrap; }
+.hint-text { color: var(--muted); font-size: 13px; margin: 2px 0; }
+.chart { background: #fff; border: 1px solid var(--line); border-radius: 4px; margin-top: 4px; }
+.chart svg { width: 100%; height: auto; display: block; }
+fieldset.add .row.wrap select, fieldset.add .row.wrap input { min-width: 92px; flex: 1 1 92px; }
+
+.machine { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
+.machine li { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--hover); }
+.machine li .ends { flex: 1; min-width: 0; color: var(--muted); }
+.machine li button:last-child { padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }

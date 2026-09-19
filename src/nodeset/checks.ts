@@ -1,7 +1,8 @@
 // Checks on the model being edited, following OPC 10000-3. Findings are
 // advice while editing; nothing prevents saving a model with findings.
 
-import { AddressSpace, REF, RULE } from './address-space';
+import { AddressSpace, REF, RULE, SM } from './address-space';
+import { isStateMachineType, readStateMachine } from './statemachine';
 import { NodeSetFile, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export type Severity = 'error' | 'warning';
@@ -33,6 +34,8 @@ export const RULES: Record<string, string> = {
   M017: 'Two fields of a DataType have the same name, or two values the same number.',
   M018: 'A symmetric ReferenceType has an InverseName.',
   M019: 'No reference at all leads to a node: it is part of no type and no hierarchy.',
+  M020: 'A transition of a state machine does not name both of its ends.',
+  M021: 'A state or transition has no number, or two of them share one.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -64,8 +67,14 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       add('M005', 'error', n, 'it has no supertype.');
     }
 
+    // The available states and transitions of a machine type carry no
+    // ModellingRule, as the base model's own machines show.
+    const definition = space.typeDefinition(n)?.id;
+    const partOfMachine = definition !== undefined
+      && (space.isSubtypeOf(definition, SM.StateType) || space.isSubtypeOf(definition, SM.TransitionType));
+
     const rule = space.modellingRule(n);
-    if (!TYPE_CLASSES.has(n.nodeClass) && !rule && insideType(space, n)) {
+    if (!TYPE_CLASSES.has(n.nodeClass) && !rule && !partOfMachine && insideType(space, n)) {
       add('M006', 'warning', n, 'it is part of a type but has no ModellingRule, so instances will not get it.');
     }
     const typeDefinition = space.typeDefinition(n);
@@ -133,6 +142,23 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     // Encodings and other nodes hang on references of their own kind; only a node nothing points to is lost.
     if (!TYPE_CLASSES.has(n.nodeClass) && !space.parentOf(n) && space.in(n.id).length === 0) {
       add('M019', 'warning', n, 'no reference leads to it; it is part of no type and no hierarchy.');
+    }
+
+    if (isStateMachineType(space, n)) {
+      const machine = readStateMachine(space, n);
+      for (const t of machine.transitions) {
+        if (!t.from || !t.to) add('M020', 'error', n, `the transition '${t.name}' has no ${!t.from ? 'FromState' : 'ToState'}.`);
+      }
+      for (const [what, items] of [['state', machine.states], ['transition', machine.transitions]] as const) {
+        const numbers = new Map<number, number>();
+        for (const i of items) {
+          if (i.number === undefined) add('M021', 'warning', n, `the ${what} '${i.name}' has no number.`);
+          else numbers.set(i.number, (numbers.get(i.number) ?? 0) + 1);
+        }
+        for (const [number, count] of numbers) {
+          if (count > 1) add('M021', 'error', n, `${count} ${what}s share the number ${number}.`);
+        }
+      }
     }
 
     // Standard properties (InputArguments, EnumStrings …) keep their BrowseName in the UA namespace.

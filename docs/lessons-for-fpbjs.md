@@ -121,6 +121,25 @@ the new supertype directly.
 *FPB.js:* the same holds for CommandInterceptor handlers that query the
 element registry before the canvas has updated.
 
+**A 300 px panel has room for two columns, not four.** The state machine's
+transitions first stood in a table of name, from, to and cause: the cells ran
+over their column borders, and cutting them off with an ellipsis only hid the
+names instead. One line per item ("IdleToRunning  Idle → Running / Start()")
+uses the whole width and reads at a glance. Tables belong where the columns
+are short (a name and a number); lists where they carry names.
+*FPB.js:* the same holds for the properties panel of a shape with several
+relations.
+
+**A second, small picture next to the big one.** A state machine is drawn
+into the panel as an SVG chart of its own (states on a circle, transitions as
+arrows labelled "Name / Cause()"), while the canvas keeps showing the type
+with its components. The big diagram answers "what does this type hold", the
+small one "which state leads where"; neither answers both. The chart is pure
+geometry from the model, so it needs no layout of its own and survives an
+export.
+*FPB.js:* a small view of a process's layers, or of the flow between
+operators, could sit in the panel the same way.
+
 ## Embedding in the AutomationML Editor
 
 **Test the host bridge without the host.** A Playwright init script puts a
