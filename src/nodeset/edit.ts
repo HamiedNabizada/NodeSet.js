@@ -43,6 +43,7 @@ const OBJECTS_FOLDER = uaKey(85);
 const ARGUMENT = uaKey(296);
 const STRUCTURE = uaKey(22);
 const ENUMERATION = uaKey(29);
+const HAS_ENCODING = uaKey(38);
 
 function qualified(n: UaNode): string {
   return `${n.browseName.namespaceUri}|${n.browseName.name}`;
@@ -167,6 +168,7 @@ export class ModelEditor {
       t.references.push({ type: REF.HasSubtype, isForward: false, target: base });
       if (nodeClass === 'VariableType') { t.dataType = uaKey(24); t.valueRank = -2; } // BaseDataType, any rank
       if (nodeClass === 'ReferenceType') t.inverseName = [{ text: `Inverse${name.trim()}` }];
+      if (nodeClass === 'DataType' && this.space().isSubtypeOf(base, STRUCTURE)) this.ensureEncodings(t);
       return t.id;
     });
   }
@@ -363,6 +365,7 @@ export class ModelEditor {
         })),
       };
       if (isEnum) this.setEnumStrings(d, fields.map(f => f.name.trim()));
+      else this.ensureEncodings(d);
     });
   }
 
@@ -384,6 +387,29 @@ export class ModelEditor {
     }
     p.arrayDimensions = String(names.length);
     p.valueXml = `<ListOfLocalizedText xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">${names.map(n => `<LocalizedText><Text>${escapeXml(n)}</Text></LocalizedText>`).join('')}</ListOfLocalizedText>`;
+  }
+
+  /**
+   * Gives a structure its DataTypeEncoding objects ("Default Binary",
+   * "Default XML", "Default JSON"), which servers need to encode values of
+   * it. The dictionaries of OPC 10000-5 (HasDescription) are deprecated
+   * since 1.04 and not created.
+   */
+  private ensureEncodings(d: UaNode) {
+    const existing = new Set(this.file.nodes
+      .filter(n => n.references.some(r => r.type === HAS_ENCODING && !r.isForward && r.target === d.id))
+      .map(n => n.browseName.name));
+    for (const name of ['Default Binary', 'Default XML', 'Default JSON']) {
+      if (existing.has(name)) continue;
+      const e = this.create('Object', name);
+      e.browseName = { namespaceUri: UA_NAMESPACE, name };
+      e.symbolicName = name.replace(' ', '');
+      e.references.push(
+        { type: HAS_ENCODING, isForward: false, target: d.id },
+        { type: REF.HasTypeDefinition, isForward: true, target: uaKey(76) },
+      );
+      d.references.push({ type: HAS_ENCODING, isForward: true, target: e.id });
+    }
   }
 
   private removeNodes(doomed: Set<string>) {
@@ -581,6 +607,10 @@ export class ModelEditor {
         }
       };
       collect(root);
+      // A DataType's encodings go with it.
+      for (const key of [...doomed]) {
+        for (const e of this.space().out(key, HAS_ENCODING, false)) if (this.owns(e.target)) doomed.add(e.target);
+      }
       if (this.file.nodes.some(n => !doomed.has(n.id) && n.references.some(r => r.type === REF.HasSubtype && !r.isForward && doomed.has(r.target)))) {
         throw new EditError(`'${root.browseName.name}' has subtypes; delete or move them first.`);
       }

@@ -2,7 +2,7 @@
 // advice while editing; nothing prevents saving a model with findings.
 
 import { AddressSpace, REF } from './address-space';
-import { NodeSetFile, text, UA_NAMESPACE, UaNode } from './model';
+import { NodeSetFile, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export type Severity = 'error' | 'warning';
 
@@ -23,6 +23,7 @@ export const RULES: Record<string, string> = {
   M007: 'An instance (no ModellingRule) is typed by an abstract type.',
   M008: 'A non-symmetric ReferenceType has no InverseName.',
   M009: 'The BrowseName is in another namespace than the NodeId.',
+  M010: 'A structure has no "Default Binary" encoding, so servers cannot encode its values.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -65,6 +66,10 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 
     if (n.nodeClass === 'ReferenceType' && !n.symmetric && text(n.inverseName) === '') {
       add('M008', 'warning', n, 'it has no InverseName.');
+    }
+    if (n.nodeClass === 'DataType' && !n.isAbstract && space.isSubtypeOf(n.id, uaKey(22))
+      && !space.out(n.id, uaKey(38), false).some(e => space.get(e.target)?.browseName.name === 'Default Binary')) {
+      add('M010', 'warning', n, 'it has no "Default Binary" encoding.');
     }
     // Standard properties (InputArguments, EnumStrings …) keep their BrowseName in the UA namespace.
     if (!n.id.startsWith(n.browseName.namespaceUri + '|') && n.browseName.namespaceUri !== UA_NAMESPACE) {

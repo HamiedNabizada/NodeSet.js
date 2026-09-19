@@ -133,3 +133,22 @@ describe('Editing methods and data types', () => {
     expect(() => editor.setFields(mode, [{ name: 'A' }, { name: 'A' }])).toThrow(/Two fields/);
   });
 });
+
+describe('Structure encodings', () => {
+  it('gives a structure its encodings once and deletes them with it', async () => {
+    const { ws, editor } = await pumpModel();
+    const settings = editor.addType('DataType', 'PumpSettingsDataType');
+    editor.setFields(settings, [{ name: 'Speed', dataType: uaKey(11) }]);
+    const space = ws.space;
+    const encodings = space.out(settings, uaKey(38), false).map(e => space.get(e.target)!);
+
+    expect(encodings.map(e => e.browseName.name).sort()).toEqual(['Default Binary', 'Default JSON', 'Default XML']);
+    expect(encodings.every(e => e.browseName.namespaceUri === 'http://opcfoundation.org/UA/' && space.typeDefinition(e)?.id === uaKey(76))).toBe(true);
+    const before = ws.editable!.nodes.length;
+    editor.delete(settings);
+    expect(ws.editable!.nodes.length).toBe(before - 4);
+    // An enumeration gets none.
+    const mode = editor.addType('DataType', 'ModeEnum', uaKey(29));
+    expect(ws.space.out(mode, uaKey(38), false)).toEqual([]);
+  });
+});
