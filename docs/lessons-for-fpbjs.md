@@ -27,6 +27,13 @@ cannot be undone, the command stack is never cleared. Snapshots of the whole
 FPB model (all layers) would make undo layer-independent and cover every
 command at once. Models of a few thousand elements clone in milliseconds.
 
+**Rebuild only what changes: a layered index.** Rebuilding the whole index
+after every edit cost 66 ms, almost all of it for the 5000 nodes of the base
+model nobody edits. The address space now sits on a base layer that is
+indexed once; an edit re-indexes only the edited model: 0.6 ms per edit.
+*FPB.js:* the same applies to libraries and hidden layers: what the user is
+not editing can be indexed once and shared.
+
 **Edits as one API with typed errors.** `ModelEditor` is the only way to
 change the model; it throws `EditError` with a sentence for the user, which
 the UI shows in the status line.
