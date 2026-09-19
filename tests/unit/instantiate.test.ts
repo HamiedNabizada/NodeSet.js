@@ -100,3 +100,16 @@ describe('Children of instances', () => {
     expect(ws.space.modellingRule(ws.space.get(note)!)).toBeUndefined();
   });
 });
+
+describe('Methods of instances', () => {
+  it('name their declaration as MethodDeclarationId, also after saving', async () => {
+    const { ws, e, pumpType } = await pumps();
+    const p = e.instantiate(pumpType, 'P-105');
+    const start = ws.space.children(ws.space.get(p)!).find(c => c.node.browseName.name === 'Start')!.node;
+    const declaration = ws.space.children(ws.space.get(pumpType)!).find(c => c.node.browseName.name === 'Start')!.node;
+
+    expect(start.methodDeclaration).toBe(declaration.id);
+    const xml = ws.save();
+    expect(xml).toMatch(/<UAMethod NodeId="ns=1;i=\d+" BrowseName="1:Start" ParentNodeId="ns=1;i=\d+" MethodDeclarationId="ns=1;i=\d+"/);
+  });
+});

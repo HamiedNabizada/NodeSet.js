@@ -517,6 +517,7 @@ export class ModelEditor {
       c.accessLevel = d.accessLevel;
       c.valueXml = d.valueXml;
       c.arguments = d.arguments ? structuredClone(d.arguments) : undefined;
+      if (d.nodeClass === 'Method') c.methodDeclaration = d.methodDeclaration ?? d.id;
       c.parent = parent.id;
       parent.references.push({ type: refType, isForward: true, target: c.id });
       c.references.push({ type: refType, isForward: false, target: parent.id });

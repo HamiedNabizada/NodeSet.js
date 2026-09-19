@@ -11,7 +11,7 @@ export class NodeSetFormatError extends Error {}
 
 const NAMED_NODE_ATTRIBUTES = new Set([
   'NodeId', 'BrowseName', 'SymbolicName', 'ParentNodeId', 'IsAbstract', 'Symmetric',
-  'DataType', 'ValueRank', 'ArrayDimensions', 'AccessLevel',
+  'DataType', 'ValueRank', 'ArrayDimensions', 'AccessLevel', 'MethodDeclarationId',
 ]);
 const NAMED_NODE_ELEMENTS = new Set(['DisplayName', 'Description', 'References', 'Value', 'Definition', 'InverseName']);
 
@@ -105,6 +105,7 @@ function readNode(
     description: localized(e, 'Description'),
     references,
     parent: resolve(e.getAttribute('ParentNodeId')),
+    methodDeclaration: resolve(e.getAttribute('MethodDeclarationId')),
     symbolicName: attr(e, 'SymbolicName'),
     isAbstract: bool(e, 'IsAbstract'),
     symmetric: bool(e, 'Symmetric'),

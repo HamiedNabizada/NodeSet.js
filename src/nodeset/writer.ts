@@ -79,6 +79,7 @@ function writeNode(
     BrowseName: qn(n.browseName),
     SymbolicName: n.symbolicName,
     ParentNodeId: n.parent ? idText(n.parent) : undefined,
+    MethodDeclarationId: n.methodDeclaration ? idText(n.methodDeclaration) : undefined,
     DataType: n.dataType ? refText(n.dataType) : undefined,
     ValueRank: n.valueRank?.toString(),
     ArrayDimensions: n.arrayDimensions,
@@ -161,6 +162,7 @@ export function namespaceTable(file: NodeSetFile): string[] {
   for (const n of file.nodes) {
     add(n.id);
     add(n.parent);
+    add(n.methodDeclaration);
     add(n.dataType);
     if (n.browseName.namespaceUri !== UA_NAMESPACE && !table.includes(n.browseName.namespaceUri)) table.push(n.browseName.namespaceUri);
     for (const r of n.references) { add(r.type); add(r.target); }

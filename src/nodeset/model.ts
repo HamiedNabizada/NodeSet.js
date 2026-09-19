@@ -105,6 +105,8 @@ export interface UaNode {
   references: Reference[];
   /** Key of the parent, as ParentNodeId in the file. */
   parent?: string;
+  /** Method of an instance: key of the method declaration it comes from (MethodDeclarationId). */
+  methodDeclaration?: string;
   symbolicName?: string;
   isAbstract?: boolean;
   /** ReferenceType */
