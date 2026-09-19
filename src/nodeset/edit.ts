@@ -9,6 +9,7 @@
 
 import { AddressSpace, REF, RULE } from './address-space';
 import { insideType } from './checks';
+import { builtInOf, ValueError, valueXml } from './values';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export class EditError extends Error {}
@@ -502,6 +503,28 @@ export class ModelEditor {
       for (const own of space.children(d)) inner.set(qualified(own.node), { node: own.node, refType: own.edge.type });
       this.fill(c, inner, childPath, options, mapping, depth + 1);
     }
+  }
+
+  /**
+   * Sets the value of a Variable or VariableType from text: a scalar, or
+   * elements separated by ";" when the ValueRank is an array. Empty text
+   * removes the value.
+   */
+  setValue(key: string, text: string | undefined): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
+      if (n.arguments) throw new EditError('Arguments are edited in their own section.');
+      if (text === undefined || text.trim() === '') { n.valueXml = undefined; return; }
+      const builtIn = builtInOf(this.space(), n.dataType);
+      if (!builtIn) throw new EditError('Values of this DataType are structures; the panel does not edit them.');
+      try {
+        n.valueXml = valueXml(builtIn, text, (n.valueRank ?? -1) >= 0);
+      } catch (e) {
+        if (e instanceof ValueError) throw new EditError(e.message);
+        throw e;
+      }
+    });
   }
 
   /** Version and publication date of the model being edited. */
