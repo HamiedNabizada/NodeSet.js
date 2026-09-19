@@ -57,7 +57,10 @@ Added after M6, from a review of what was missing:
   `saved`; only then is the model clean. The host's own Open and New replace
   the page's. Undo and redo mark the model changed only when they did
   something. Type lists and findings work from the keyboard (Enter, Space),
-  and findings name their severity in words. Structure values escape the
+  and findings name their severity in words. Names are asked in a dialog of
+  the page's own (`AskDialog`), not `window.prompt`: it follows the theme,
+  offers the ReferenceTypes for a new reference and says what is wrong
+  without closing. Structure values escape the
   namespace URI and leave out types whose names XML cannot carry.
 
 Not done: structure fields that allow subtypes (their values name their own

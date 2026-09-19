@@ -208,6 +208,9 @@ plugin catches exceptions whose stack passes through its own code in
 `Dispatcher.UnhandledException` and shows them in its status bar; handlers
 still catch what they expect.
 *FPB plugin:* worth the same net.
+Judge "ours" by the assembly of each stack frame's method, not by the text
+of the trace: its file paths name folders, and a test project called
+`...Plugin.OpcUa.Tests` looked like the plugin itself.
 
 **Keep WebView2 on its own page.** Whatever sends "apply" writes into the
 document, so the host refuses navigation to anything but its virtual host,
@@ -222,6 +225,12 @@ that. Code that writes the document now resumes on the caller's context, and
 a test runs it on a thread with its own synchronization context and checks
 where every XML change happened.
 *FPB plugin:* worth checking every await before a write.
+
+**No window.prompt in an embedded page.** It ignores the theme, offers no
+choice and closes on any answer. A small dialog of the page's own asks for a
+name, lists what may be chosen (the ReferenceTypes) and keeps itself open
+with a message when the answer is wrong.
+*FPB.js:* any prompt for a name fits the same component.
 
 **Keep a selection where its result lives.** The part of a server mirrored
 into a hierarchy is stored as an attribute at the element that stands for
