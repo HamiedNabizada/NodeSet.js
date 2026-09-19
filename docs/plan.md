@@ -31,9 +31,16 @@ Added after M6, from a review of what was missing:
 - Enumerations with any values (EnumValues instead of EnumStrings).
 - MethodDeclarationId kept as a NodeId and set on methods of instances.
 - Editing on the canvas: context pad (add child, draw reference, delete).
+- ExtensionObject values read structurally (TypeId as a NodeId, so its index
+  follows the saved file); single structures whose fields are built-in types
+  edited field by field (Range, EUInformation, own structures).
+- OptionSets (subtypes of an unsigned integer or of OptionSet, IsOptionSet,
+  OptionSetValues), unions (IsUnion), optional structure fields, check M011.
+  Changing a DataType's supertype fits its encodings and fields.
 
-Not done: OptionSets and unions, structured values (ExtensionObjects) in the
-panel, a test inside the AutomationML Editor itself.
+Not done: arrays of structures, structures with optional or structured fields
+and unions as values (kept as read), a test inside the AutomationML Editor
+itself.
 
 ## Decisions
 

@@ -97,6 +97,30 @@ DataType fields are edited as a list in the panel and applied with one
 button, which is one undo step and one validation, instead of an edit per
 keystroke.
 
+**Memoize on content, not on object identity.** The editor changes nodes in
+place, so a panel's `useMemo([node])` kept the old fields after an apply and
+the Apply button stayed. Depending on the changed part, or on a content key,
+fixes it.
+*FPB.js:* business objects are mutated in place too; the same trap applies
+to any memoized panel state.
+
+**Compare drafts by a normalized key.** `JSON.stringify` depends on the order
+in which properties were set, so a draft built by the UI and the same data
+read from the model compared unequal. A key function with a fixed order per
+item does not.
+
+**A failed change must not reset the draft.** A change that fails restores
+the snapshot and rebuilds, which gives every node a new identity; a panel that
+resets its draft on a new identity then throws away what the user typed along
+with the error. Resetting only when the content key changes keeps it.
+
+**Inside a transaction, the index is still the old one.** The address space
+is rebuilt after a change, so code that runs within the change and asks the
+index about a supertype it just set gets the old answer. Such code asks about
+the new supertype directly.
+*FPB.js:* the same holds for CommandInterceptor handlers that query the
+element registry before the canvas has updated.
+
 ## Embedding in the AutomationML Editor
 
 **Test the host bridge without the host.** A Playwright init script puts a
