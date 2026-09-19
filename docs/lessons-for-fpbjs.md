@@ -69,6 +69,19 @@ when two canvases share a page), and can be tested.
 **`fit-viewport` needs a floor.** Fitting a tall diagram makes text
 unreadable; below zoom 0.75 the modeler shows 1:1 from the top left instead.
 
+**diagram-js 15 context pad: `html` is the whole entry.** An entry's `html`
+replaces the default `<div class="entry">`, so it must carry the class
+`entry` itself, or the pad's click and drag handling does not find it.
+
+**diagram-js 15 toggles selection on click.** Clicking an element that is
+already selected deselects it and closes its context pad. Tests (and users)
+that "click to make sure it is selected" undo the selection.
+
+**Draw references by dragging, decide in the application.** A rule allows
+`connection.create`, and a `connect.end` listener with higher priority hands
+source and target to the application and returns `false`, so no line is
+drawn on the canvas; the model changes, and the diagram is rebuilt from it.
+
 **TypeScript works with diagram-js 15** through Babel's TypeScript preset; the
 package ships `.d.ts` files. `BaseRenderer` subclasses must accept
 `businessObject` as optional.
