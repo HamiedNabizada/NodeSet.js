@@ -186,6 +186,29 @@ look like the rest.
 **Aml.Engine wraps anew on every access.** Two reads of the same element give
 two wrapper objects; compare IDs, not references (`Assert.Same` fails).
 
+**Clean only when the host says so.** The modeler used to clear its dirty
+mark as soon as it posted "apply"; an import that then failed left the user
+believing the model was in the document. Now the host answers "applied" (and
+"saved" for a save dialog of its own) with ok and a text, and only ok clears
+the mark. The host asks before Open, New or Reload drop a dirty model; the
+page hides its own Open and New when hosted, since only the host knows the
+NodeSet folders.
+*FPB plugin:* the same handshake fits any "apply to document" of an embedded
+editor.
+
+**Drafts register themselves.** Sections with Apply/Discard drafts (arguments,
+fields, structure values) lost their draft silently when another node was
+selected. A tiny registry (`useDraft(name, changed)`, `mayLeaveDrafts()`)
+lets the app ask before leaving, without the app knowing the sections.
+*FPB.js:* the properties panel has the same shape of problem.
+
+**A safety net for handlers.** An `async void` WPF handler that throws ends in
+the editor's dispatcher, and the editor may end with the user's work. The
+plugin catches exceptions whose stack passes through its own code in
+`Dispatcher.UnhandledException` and shows them in its status bar; handlers
+still catch what they expect.
+*FPB plugin:* worth the same net.
+
 **Keep a selection where its result lives.** The part of a server mirrored
 into a hierarchy is stored as an attribute at the element that stands for
 the server, so "mirror again" needs neither settings nor a new selection.

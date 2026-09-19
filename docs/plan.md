@@ -50,6 +50,16 @@ Added after M6, from a review of what was missing:
   implementation). The first run found that the plugin instantiated children
   without a ModellingRule (DefaultInstanceBrowseName); it no longer does.
 
+- Guards against lost work: Open, New and the DI sample ask before dropping
+  unsaved changes, leaving a node asks before dropping an unapplied draft
+  (`drafts.ts`), and on its own the page asks before it is closed or
+  reloaded. Embedded, the host answers `apply` with `applied` and a save with
+  `saved`; only then is the model clean. The host's own Open and New replace
+  the page's. Undo and redo mark the model changed only when they did
+  something. Type lists and findings work from the keyboard (Enter, Space),
+  and findings name their severity in words. Structure values escape the
+  namespace URI and leave out types whose names XML cannot carry.
+
 Not done: structure fields that allow subtypes (their values name their own
 type), matrices, a test inside the AutomationML Editor itself.
 
