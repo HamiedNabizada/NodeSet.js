@@ -63,6 +63,12 @@ Added after M6, from a review of what was missing:
   without closing. Structure values escape the
   namespace URI and leave out types whose names XML cannot carry.
 
+- Variables from a signal list: "Variables from CSV…" on a type or object of
+  the model reads a CSV file (comma, semicolon or tab, header row; columns
+  Name, DataType, Kind, ModellingRule, Description, Value) and adds one
+  variable per row, as one step that undo takes back; a bad row stops the
+  import with its line and keeps nothing (`csv.ts`, `ModelEditor.batch`).
+
 Not done: structure fields that allow subtypes (their values name their own
 type), matrices, a test inside the AutomationML Editor itself.
 

@@ -143,6 +143,27 @@ export class ModelEditor {
   }
 
   /** Runs a change as one undo step. A failing change leaves the file as it was. */
+  /**
+   * Runs several edits as one step: undo takes them back together, and when
+   * one fails none of them stays.
+   */
+  batch<T>(action: () => T): T {
+    const depth = this.undoStack.length;
+    const before = structuredClone(this.file);
+    try {
+      const result = action();
+      this.undoStack.length = depth;
+      this.undoStack.push(before);
+      this.redoStack.length = 0;
+      return result;
+    } catch (e) {
+      this.undoStack.length = depth;
+      this.file = before;
+      this.rebuild(before);
+      throw e;
+    }
+  }
+
   private change<T>(action: () => T): T {
     const before = structuredClone(this.file);
     try {

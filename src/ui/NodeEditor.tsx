@@ -8,6 +8,7 @@ import { DeclarationKind, ModelEditor } from '../nodeset/edit';
 import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
 import { builtInOf, valueText } from '../nodeset/values';
 import { structShape, structureValues } from '../nodeset/structures';
+import { addSignals, parseSignals } from '../nodeset/csv';
 import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StructureValueSection } from './Sections';
 
 const RULES: [string, string][] = [
@@ -110,6 +111,20 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {own && node.nodeClass === 'DataType' && <FieldsSection space={space} editor={editor} dataType={node} run={run} />}
       {own && canHoldChildren(node.nodeClass) && (
         <AddChild editor={editor} parent={nodeKey} run={run} onCreated={onCreated} declaration={isType || insideType(space, node)} />
+      )}
+      {own && canHoldChildren(node.nodeClass) && (
+        <div className="row">
+          <label className="button-like" title="A CSV file with a header row: Name, and optionally DataType, Kind (Variable or Property), ModellingRule, Description, Value">
+            Variables from CSV…
+            <input type="file" accept=".csv,.txt" onChange={async e => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (!file) return;
+              const text = await file.text();
+              run(() => addSignals(editor, () => space, nodeKey, parseSignals(text)));
+            }} />
+          </label>
+        </div>
       )}
       {own && <ReferencesSection space={space} editor={editor} node={node} run={run} />}
       {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
