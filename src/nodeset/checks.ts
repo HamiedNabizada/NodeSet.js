@@ -24,6 +24,7 @@ export const RULES: Record<string, string> = {
   M008: 'A non-symmetric ReferenceType has no InverseName.',
   M009: 'The BrowseName is in another namespace than the NodeId.',
   M010: 'A structure has no "Default Binary" encoding, so servers cannot encode its values.',
+  M011: 'A structure or enumeration has no fields, so clients cannot interpret its values.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -70,6 +71,10 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     if (n.nodeClass === 'DataType' && !n.isAbstract && space.isSubtypeOf(n.id, uaKey(22))
       && !space.out(n.id, uaKey(38), false).some(e => space.get(e.target)?.browseName.name === 'Default Binary')) {
       add('M010', 'warning', n, 'it has no "Default Binary" encoding.');
+    }
+    if (n.nodeClass === 'DataType' && !n.isAbstract && (space.isSubtypeOf(n.id, uaKey(22)) || space.isSubtypeOf(n.id, uaKey(29)))
+      && !n.definition?.fields.length) {
+      add('M011', 'warning', n, 'it has no fields.');
     }
     // Standard properties (InputArguments, EnumStrings …) keep their BrowseName in the UA namespace.
     if (!n.id.startsWith(n.browseName.namespaceUri + '|') && n.browseName.namespaceUri !== UA_NAMESPACE) {

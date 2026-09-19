@@ -42,4 +42,14 @@ describe('Checks', () => {
 
     expect(check(ws.space, ws.editable!).map(f => f.rule)).toEqual(['M008']);
   });
+
+  it('asks for the fields of a new structure or enumeration', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Pumps/');
+    const settings = ws.editor!.addType('DataType', 'PumpSettingsDataType');
+
+    expect(check(ws.space, ws.editable!).map(f => f.rule)).toEqual(['M011']);
+    ws.editor!.setFields(settings, [{ name: 'Speed', dataType: 'http://opcfoundation.org/UA/|i=11' }]);
+    expect(check(ws.space, ws.editable!)).toEqual([]);
+  });
 });

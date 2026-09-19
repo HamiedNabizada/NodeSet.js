@@ -170,3 +170,46 @@ describe('Enumeration values', () => {
     expect(() => editor.setFields(mode, [{ name: 'A', value: 1 }, { name: 'B', value: 1 }])).toThrow(/same/);
   });
 });
+
+describe('OptionSets and unions', () => {
+  it('names the bits of an OptionSet with OptionSetValues and checks them against the integer', async () => {
+    const { ws, editor } = await pumpModel();
+    const flags = editor.addType('DataType', 'PumpFlags', uaKey(3)); // Byte
+    editor.setFields(flags, [{ name: 'Running', value: 0 }, { name: 'Fault', value: 2 }]);
+
+    const saved = readNodeSet(ws.save());
+    const d = saved.nodes.find(n => n.browseName.name === 'PumpFlags')!;
+    const values = saved.nodes.find(n => n.browseName.name === 'OptionSetValues')!;
+    expect(d.definition!.otherAttributes.IsOptionSet).toBe('true');
+    expect(d.definition!.fields.map(f => [f.name, f.value])).toEqual([['Running', 0], ['Fault', 2]]);
+    expect(values.valueXml!.replace(/\s/g, '')).toMatch(/<Text>Running<\/Text><\/LocalizedText><LocalizedText\/><LocalizedText><Text>Fault</);
+    expect(values.arrayDimensions).toBe('3');
+    expect(ws.space.out(flags, uaKey(38), false)).toEqual([]); // an integer needs no encodings
+    expect(() => editor.setFields(flags, [{ name: 'High', value: 8 }])).toThrow(/0 to 7/);
+
+    // The OptionSet structure has any number of bits and is encoded like a structure.
+    const wide = editor.addType('DataType', 'WideFlags', uaKey(12755));
+    editor.setFields(wide, [{ name: 'Far', value: 100 }]);
+    expect(ws.space.out(wide, uaKey(38), false)).toHaveLength(3);
+  });
+
+  it('marks a union, whose fields are not optional', async () => {
+    const { ws, editor } = await pumpModel();
+    const choice = editor.addType('DataType', 'SetpointChoice', uaKey(12756));
+    editor.setFields(choice, [{ name: 'Speed', dataType: uaKey(11) }, { name: 'Flow', dataType: uaKey(11) }]);
+
+    const d = readNodeSet(ws.save()).nodes.find(n => n.browseName.name === 'SetpointChoice')!;
+    expect(d.definition!.otherAttributes.IsUnion).toBe('true');
+    expect(ws.space.out(choice, uaKey(38), false)).toHaveLength(3);
+    expect(() => editor.setFields(choice, [{ name: 'Speed', dataType: uaKey(11), isOptional: true }])).toThrow(/not optional/);
+  });
+
+  it('keeps optional structure fields', async () => {
+    const { ws, editor } = await pumpModel();
+    const s = editor.addType('DataType', 'PumpSettingsDataType');
+    editor.setFields(s, [{ name: 'Speed', dataType: uaKey(11) }, { name: 'Note', dataType: uaKey(12), isOptional: true }]);
+    const d = readNodeSet(ws.save()).nodes.find(n => n.browseName.name === 'PumpSettingsDataType')!;
+    expect(d.definition!.fields.map(f => f.isOptional ?? false)).toEqual([false, true]);
+    expect(d.definition!.otherAttributes.IsUnion).toBeUndefined();
+  });
+});

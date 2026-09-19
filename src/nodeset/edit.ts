@@ -29,6 +29,9 @@ export const TYPE_DEFINITIONS = {
 
 export type DeclarationKind = 'Object' | 'Variable' | 'Property' | 'Method';
 
+/** What the fields of a DataType's definition describe. */
+export type FieldKind = 'enumeration' | 'optionSet' | 'union' | 'structure';
+
 export interface InstantiateOptions {
   /** Where to put the instance; the Objects folder when missing. */
   parent?: string;
@@ -45,6 +48,30 @@ const STRUCTURE = uaKey(22);
 const ENUMERATION = uaKey(29);
 const HAS_ENCODING = uaKey(38);
 const ENUM_VALUE_TYPE = uaKey(7594);
+const OPTION_SET = uaKey(12755);
+const UNION = uaKey(12756);
+const UINTEGER = uaKey(28);
+/** Bits of the unsigned integers an OptionSet can be a subtype of. */
+const BITS: Record<string, number> = { [uaKey(3)]: 8, [uaKey(5)]: 16, [uaKey(7)]: 32, [uaKey(9)]: 64 };
+
+/**
+ * Enumerations, OptionSets (subtypes of an unsigned integer or of the
+ * OptionSet structure), unions and other structures have fields; other
+ * DataTypes have none.
+ */
+export function fieldKind(space: AddressSpace, dataType: string): FieldKind | undefined {
+  if (space.isSubtypeOf(dataType, ENUMERATION)) return 'enumeration';
+  if (space.isSubtypeOf(dataType, UINTEGER) || space.isSubtypeOf(dataType, OPTION_SET)) return 'optionSet';
+  if (space.isSubtypeOf(dataType, UNION)) return 'union';
+  if (space.isSubtypeOf(dataType, STRUCTURE)) return 'structure';
+  return undefined;
+}
+
+/** How many bits an OptionSet has: those of the integer it refines, any number for the OptionSet structure. */
+function optionBits(space: AddressSpace, dataType: string): number | undefined {
+  for (const [key, bits] of Object.entries(BITS)) if (space.isSubtypeOf(dataType, key)) return bits;
+  return space.isSubtypeOf(dataType, OPTION_SET) ? undefined : 64;
+}
 
 function qualified(n: UaNode): string {
   return `${n.browseName.namespaceUri}|${n.browseName.name}`;
@@ -335,43 +362,62 @@ export class ModelEditor {
   }
 
   /**
-   * Sets the fields of a structure or the values of an enumeration. An
-   * enumeration gets its EnumStrings property; its values are 0, 1, 2 … in
-   * the order given.
+   * Sets the fields of a DataType's definition (OPC 10000-3 5.8.3, 8.40):
+   * - an enumeration names its values; it gets EnumStrings when they are
+   *   0, 1, 2 …, EnumValues otherwise;
+   * - an OptionSet names its bits (IsOptionSet); it gets OptionSetValues;
+   * - a union has exactly one of its fields set (IsUnion), none optional;
+   * - a structure has typed fields, some of which may be optional.
+   * Structures, unions and OptionSet structures get their encodings.
    */
   setFields(dataType: string, fields: { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }[]): void {
     this.change(() => {
       const d = this.node(dataType);
       if (d.nodeClass !== 'DataType') throw new EditError('Only a DataType has fields.');
-      const isEnum = this.space().isSubtypeOf(d.id, ENUMERATION);
-      if (!isEnum && !this.space().isSubtypeOf(d.id, STRUCTURE)) {
-        throw new EditError('Fields belong to structures (subtypes of Structure) and enumerations (subtypes of Enumeration).');
+      const space = this.space();
+      const kind = fieldKind(space, d.id);
+      if (!kind) {
+        throw new EditError('Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).');
       }
+      const numbered = kind === 'enumeration' || kind === 'optionSet';
       const names = new Set<string>();
       for (const f of fields) {
         if (!f.name.trim()) throw new EditError('Every field needs a name.');
         if (names.has(f.name.trim())) throw new EditError(`Two fields are named '${f.name.trim()}'.`);
         names.add(f.name.trim());
-        if (!isEnum && this.space().get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
+        if (!numbered && space.get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
+        if (kind === 'union' && f.isOptional) throw new EditError('The fields of a union are not optional; exactly one of them is set.');
       }
-      if (isEnum) {
+      if (numbered) {
         const values = fields.map((f, i) => f.value ?? i);
-        if (values.some(v => !Number.isInteger(v))) throw new EditError('Enumeration values are integers.');
-        if (new Set(values).size !== values.length) throw new EditError('Two enumeration values are the same.');
+        const what = kind === 'enumeration' ? 'Enumeration values' : 'Bits';
+        if (values.some(v => !Number.isInteger(v))) throw new EditError(`${what} are integers.`);
+        if (new Set(values).size !== values.length) throw new EditError(`Two ${kind === 'enumeration' ? 'enumeration values' : 'options'} are the same.`);
+        const bits = kind === 'optionSet' ? optionBits(space, d.id) : undefined;
+        if (kind === 'optionSet' && values.some(v => v < 0 || (bits !== undefined && v >= bits))) {
+          throw new EditError(`Bits of '${d.browseName.name}' are 0 to ${(bits ?? 1) - 1}.`);
+        }
       }
+      const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
       d.definition = {
         name: d.browseName,
-        otherAttributes: d.definition?.otherAttributes ?? {},
+        otherAttributes: {
+          ...otherAttributes,
+          ...(kind === 'union' ? { IsUnion: 'true' } : {}),
+          ...(kind === 'optionSet' ? { IsOptionSet: 'true' } : {}),
+        },
         fields: fields.map((f, i) => ({
           name: f.name.trim(),
-          ...(isEnum ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
+          ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
           description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
           displayName: [],
           otherAttributes: {},
         })),
       };
-      if (isEnum) this.setEnumProperties(d, d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) })));
-      else this.ensureEncodings(d);
+      const entries = d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) }));
+      if (kind === 'enumeration') this.setEnumProperties(d, entries);
+      if (kind === 'optionSet') this.setOptionSetValues(d, entries);
+      if (space.isSubtypeOf(d.id, STRUCTURE)) this.ensureEncodings(d);
     });
   }
 
@@ -387,20 +433,7 @@ export class ModelEditor {
     const dropped = this.space().children(d).filter(c => c.node.browseName.name === drop && c.node.browseName.namespaceUri === UA_NAMESPACE);
     if (dropped.length > 0) this.removeNodes(new Set(dropped.map(c => c.node.id)));
 
-    const existing = this.space().children(d).find(c => c.node.browseName.name === keep && c.node.browseName.namespaceUri === UA_NAMESPACE);
-    let p = existing && this.owns(existing.node.id) ? this.node(existing.node.id) : undefined;
-    if (!p) {
-      p = this.create('Variable', keep);
-      p.browseName = { namespaceUri: UA_NAMESPACE, name: keep };
-      d.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
-      p.references.push(
-        { type: REF.HasProperty, isForward: false, target: d.id },
-        { type: REF.HasTypeDefinition, isForward: true, target: uaKey(68) },
-        { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
-      );
-      p.parent = d.id;
-      p.valueRank = 1;
-    }
+    const p = this.standardProperty(d, keep);
     p.dataType = contiguous ? uaKey(21) : ENUM_VALUE_TYPE; // LocalizedText or EnumValueType
     p.arrayDimensions = String(entries.length);
     const types = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
@@ -409,6 +442,38 @@ export class ModelEditor {
       : `<ListOfExtensionObject xmlns="${types}">${entries.map(e => '<ExtensionObject><TypeId><Identifier>i=7616</Identifier></TypeId><Body><EnumValueType>'
         + `<Value>${e.value}</Value><DisplayName><Text>${escapeXml(e.name)}</Text></DisplayName>`
         + `<Description>${e.description ? `<Text>${escapeXml(e.description)}</Text>` : ''}</Description></EnumValueType></Body></ExtensionObject>`).join('')}</ListOfExtensionObject>`;
+  }
+
+  /**
+   * The names of an OptionSet's bits: a LocalizedText per bit up to the
+   * highest one used, empty for bits without a name.
+   */
+  private setOptionSetValues(d: UaNode, entries: { name: string; value: number }[]) {
+    const names: string[] = [];
+    for (const e of entries) names[e.value] = e.name;
+    const p = this.standardProperty(d, 'OptionSetValues');
+    p.dataType = uaKey(21);
+    p.arrayDimensions = String(names.length);
+    const types = 'http://opcfoundation.org/UA/2008/02/Types.xsd';
+    p.valueXml = `<ListOfLocalizedText xmlns="${types}">${Array.from(names, n => (n === undefined ? '<LocalizedText />'
+      : `<LocalizedText><Text>${escapeXml(n)}</Text></LocalizedText>`)).join('')}</ListOfLocalizedText>`;
+  }
+
+  /** A property of a DataType from the UA namespace (EnumStrings, OptionSetValues …), created if missing. */
+  private standardProperty(d: UaNode, name: string): UaNode {
+    const existing = this.space().children(d).find(c => c.node.browseName.name === name && c.node.browseName.namespaceUri === UA_NAMESPACE);
+    if (existing && this.owns(existing.node.id)) return this.node(existing.node.id);
+    const p = this.create('Variable', name);
+    p.browseName = { namespaceUri: UA_NAMESPACE, name };
+    d.references.push({ type: REF.HasProperty, isForward: true, target: p.id });
+    p.references.push(
+      { type: REF.HasProperty, isForward: false, target: d.id },
+      { type: REF.HasTypeDefinition, isForward: true, target: uaKey(68) },
+      { type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory },
+    );
+    p.parent = d.id;
+    p.valueRank = 1;
+    return p;
   }
 
   /**
