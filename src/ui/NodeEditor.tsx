@@ -6,6 +6,7 @@ import { AddressSpace, RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { DeclarationKind, ModelEditor } from '../nodeset/edit';
 import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
+import { builtInOf, valueText } from '../nodeset/values';
 import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection } from './Sections';
 
 const RULES: [string, string][] = [
@@ -89,6 +90,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
               {VALUE_RANKS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </Field>
+          {!node.arguments && <ValueField space={space} editor={editor} node={node} own={own} run={run} />}
         </>
       )}
       {node.nodeClass === 'ReferenceType' && (
@@ -119,6 +121,21 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
         </div>
       )}
     </div>
+  );
+}
+
+/** The value as text: a scalar, or array elements separated by ";". Structured values are shown, not edited. */
+function ValueField({ space, editor, node, own, run }: { space: AddressSpace; editor: ModelEditor; node: UaNode; own: boolean; run: Props['run'] }) {
+  const builtIn = builtInOf(space, node.dataType);
+  const current = valueText(node, builtIn);
+  const array = (node.valueRank ?? -1) >= 0;
+  return (
+    <Field label="Value">
+      {current === null
+        ? <span className="note">A structured value; kept as it was read.</span>
+        : <TextInput value={current ?? ''} disabled={!own || !builtIn} placeholder={!builtIn ? 'no simple value' : array ? 'a; b; c' : builtIn}
+            onCommit={v => run(() => editor.setValue(node.id, v))} />}
+    </Field>
   );
 }
 
@@ -169,13 +186,15 @@ function Field({ label: title, children }: { label: string; children: React.Reac
 }
 
 /** A text field that commits on Enter or when it loses focus. */
-function TextInput({ value, disabled, multiline, onCommit }: { value: string; disabled?: boolean; multiline?: boolean; onCommit: (v: string) => void }) {
+function TextInput({ value, disabled, multiline, placeholder, onCommit }: {
+  value: string; disabled?: boolean; multiline?: boolean; placeholder?: string; onCommit: (v: string) => void;
+}) {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = () => { if (draft !== value) onCommit(draft); };
   return multiline
     ? <textarea value={draft} disabled={disabled} rows={3} onChange={e => setDraft(e.target.value)} onBlur={commit} />
-    : <input value={draft} disabled={disabled} onChange={e => setDraft(e.target.value)} onBlur={commit}
+    : <input value={draft} disabled={disabled} placeholder={placeholder} onChange={e => setDraft(e.target.value)} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setDraft(value); }} />;
 }
 
