@@ -6,7 +6,17 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- A second entry, `nodeset-js/core`: the NodeSet layer without the canvas and
+  without React, so a script can build and check a NodeSet in Node. The base
+  model and DI are inside that build. `npm run verify:core` keeps it honest.
+
+### Fixed
+
+- References that are not the ones holding a child now run on rails beside the
+  shapes instead of crossing them, and their names sit on the longest straight
+  piece of the line, on a sheet of their own.
 
 ## [0.1.0] - 2026-09-20
 

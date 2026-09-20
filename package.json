@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:web": "webpack --config webpack.config.js --mode production",
-    "build:lib": "webpack --config webpack.lib.config.js --mode production && tsc -p tsconfig.lib.json"
+    "build:lib": "webpack --config webpack.lib.config.js --mode production && tsc -p tsconfig.lib.json",
+    "verify:core": "node scripts/verify-core.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
@@ -45,6 +46,18 @@
   "main": "dist/lib/nodeset.umd.js",
   "module": "dist/lib/nodeset.esm.js",
   "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/lib/nodeset.esm.js",
+      "require": "./dist/lib/nodeset.umd.js"
+    },
+    "./core": {
+      "types": "./dist/types/core.d.ts",
+      "import": "./dist/lib/nodeset.core.mjs",
+      "require": "./dist/lib/nodeset.core.cjs"
+    }
+  },
   "files": [
     "dist/lib",
     "dist/types",

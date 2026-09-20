@@ -33,6 +33,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The core entry is what a script uses; it must run without a browser.
+      - name: The core build runs in Node
+        run: npm run verify:core
+
       # The web build is what the AMLOpcUa plugin bundles; the library build is
       # what another page imports.
       - uses: actions/upload-artifact@v4

@@ -56,3 +56,22 @@ const nodeSet = ws.save();                  // NodeSet2 XML
 
 `App` is the complete modeler as a React component; `NodeSetModeler` is the
 canvas alone. React 18 is a peer dependency.
+
+For a script, in a page or in Node, there is a second entry without the canvas
+and without React:
+
+```js
+const { Workspace, check } = require('nodeset-js/core');
+
+const ws = new Workspace();
+await ws.create('http://example.org/Pump/');            // brings the base model with it
+const type = ws.editor.addStateMachineType('PumpStateMachineType');
+const idle = ws.editor.addState(type, 'Idle', 1);
+const running = ws.editor.addState(type, 'Running', 2);
+ws.editor.addTransition(type, 'IdleToRunning', 1, idle, running);
+console.log(check(ws.space, ws.editable));              // the rules on the model
+require('fs').writeFileSync('Pump.NodeSet2.xml', ws.save());
+```
+
+The base NodeSet and DI are inside that build, so a script needs nothing else.
+`npm run verify:core` checks that it still runs outside a browser.

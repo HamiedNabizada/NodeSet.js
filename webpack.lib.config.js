@@ -1,4 +1,5 @@
-// The library build: ES module and UMD, React left to the application.
+// The library build: ES module and UMD of the whole modeler, and the NodeSet
+// core on its own, which runs in Node as well because it touches no window.
 const path = require('path');
 
 const common = {
@@ -16,6 +17,16 @@ const common = {
   devtool: 'source-map',
 };
 
+// The bundled NodeSets are loaded with import() so a page fetches them only
+// when it needs them; for the core they belong inside the one file a script
+// requires, so the dynamic import is resolved while bundling.
+const core = {
+  ...common,
+  entry: './src/core.ts',
+  externals: {},
+  module: { ...common.module, parser: { javascript: { dynamicImportMode: 'eager' } } },
+};
+
 module.exports = [
   {
     ...common,
@@ -31,5 +42,29 @@ module.exports = [
       'react/jsx-runtime': { root: ['React', 'jsxRuntime'], commonjs: 'react/jsx-runtime', commonjs2: 'react/jsx-runtime', amd: 'react/jsx-runtime' },
     },
     output: { path: path.join(__dirname, 'dist/lib'), filename: 'nodeset.umd.js', library: { name: 'NodeSet', type: 'umd' }, globalObject: 'this', chunkFilename: 'nodeset.[name].umd.js' },
+  },
+  {
+    // The core for Node: CommonJS, and the bundled NodeSets inside the file
+    // rather than in chunks beside it, so a script needs one require.
+    ...core,
+    target: 'node',
+    optimization: { splitChunks: false, runtimeChunk: false },
+    output: {
+      path: path.join(__dirname, 'dist/lib'),
+      filename: 'nodeset.core.cjs',
+      library: { type: 'commonjs2' },
+    },
+  },
+  {
+    // The same core as an ES module, for a page or for "import" in Node.
+    ...core,
+    experiments: { outputModule: true },
+    optimization: { splitChunks: false, runtimeChunk: false },
+    output: {
+      path: path.join(__dirname, 'dist/lib'),
+      filename: 'nodeset.core.mjs',
+      library: { type: 'module' },
+      chunkFormat: 'module',
+    },
   },
 ];
