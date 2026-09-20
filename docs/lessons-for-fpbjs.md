@@ -58,6 +58,19 @@ ignore it.
 *FPB.js:* the same idea applies to the AML export: layout in an extension or
 attribute of the element it belongs to, keyed by ID, not by position in a list.
 
+**Inheritance means two different things in two formats.** When a type
+redeclares a child its supertype already declares, OPC UA replaces the node
+and keeps everything below it, while AML's flattening replaces the whole
+subtree. Instantiating a type through the host format therefore lost
+children silently, in 191 of 422 overriding declarations across the released
+companion specifications. The fix was not a special case but a step of its
+own: walk the type chain, copy back what the overridden declaration holds,
+then apply the rules as usual.
+*FPB.js:* decomposition has the same trap. A child layer that redefines an
+element of its parent must not quietly drop what hung below the parent's
+version, and any mapping to a host format needs to be checked against a
+corpus, not against one example.
+
 ## diagram-js
 
 **Markers drawn as geometry, not SVG `<marker>`.** Arrow heads and hash

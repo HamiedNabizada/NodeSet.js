@@ -283,7 +283,25 @@ export class ModelEditor {
     this.change(() => {
       const n = this.node(key);
       n.isAbstract = isAbstract ? true : undefined;
+      // An abstract DataType is never encoded, so it is the source of no
+      // HasEncoding (OPC 10000-3); a concrete structure needs its encodings.
+      if (n.nodeClass !== 'DataType') return;
+      if (isAbstract) this.removeEncodings(n);
+      else if (this.space().isSubtypeOf(n.id, uaKey(22))) this.ensureEncodings(n);
     });
+  }
+
+  /** Removes the encodings of a DataType with the nodes that carry them. */
+  private removeEncodings(dataType: UaNode): void {
+    const encodings = dataType.references
+      .filter(r => r.type === uaKey(38) && r.isForward)
+      .map(r => r.target);
+    if (encodings.length === 0) return;
+    dataType.references = dataType.references.filter(r => !(r.type === uaKey(38) && r.isForward));
+    this.file.nodes = this.file.nodes.filter(n => !encodings.includes(n.id));
+    for (const n of this.file.nodes) {
+      n.references = n.references.filter(r => !encodings.includes(r.target));
+    }
   }
 
   setSupertype(key: string, supertype: string): void {
@@ -785,7 +803,14 @@ export class ModelEditor {
     const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, Declaration>();
     for (const over of [...d.overrides, d.node]) {
       for (const own of space.children(over)) {
-        inner.set(qualified(own.node), { node: own.node, refType: own.edge.type, overrides: [] });
+        const key = qualified(own.node);
+        const previous = inner.get(key);
+        // A child that overrides another keeps it too, at every depth.
+        inner.set(key, {
+          node: own.node,
+          refType: own.edge.type,
+          overrides: previous ? [...previous.overrides, previous.node] : [],
+        });
       }
     }
     return inner;

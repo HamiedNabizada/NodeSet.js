@@ -57,6 +57,25 @@ describe('Overriding a declaration', () => {
     expect(paths).toContain('Sub/FromBaseType');
   });
 
+  it('keeps what an overridden declaration holds two levels down', async () => {
+    // The same rule below a declaration: Sub/Inner of DerivedType overrides
+    // Sub/Inner of BaseType, and the instance gets the children of both.
+    const { ws, e, derived } = await types();
+    const base = ws.space.typeChain(ws.space.get(derived)!).find(t => t.browseName.name === 'BaseType')!;
+    for (const [type, mark] of [[base, 'Base'], [ws.space.get(derived)!, 'Derived']] as const) {
+      const sub = ws.space.children(type).find(c => c.node.browseName.name === 'Sub')!;
+      const inner = e.addDeclaration(sub.node.id, 'Object', 'Inner');
+      e.addDeclaration(inner, 'Variable', `Inner${mark}`);
+    }
+
+    const instance = e.instantiate(derived, 'Thing');
+    const sub = ws.space.children(ws.space.get(instance)!).find(c => c.node.browseName.name === 'Sub')!;
+    const inner = ws.space.children(sub.node).find(c => c.node.browseName.name === 'Inner')!;
+    const names = ws.space.children(inner.node).map(c => c.node.browseName.name).sort();
+
+    expect(names).toEqual(['InnerBase', 'InnerDerived']);
+  });
+
   it('tells two children apart that share a name in different namespaces', async () => {
     // A type may hold its own NodeVersion beside the one of the UA namespace;
     // the BrowseName is unique with its namespace, not without it.

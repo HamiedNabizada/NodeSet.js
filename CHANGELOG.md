@@ -11,9 +11,6 @@ Until 1.0.0 the library's shape may still change between minor versions.
 - A second entry, `nodeset-js/core`: the NodeSet layer without the canvas and
   without React, so a script can build and check a NodeSet in Node. The base
   model and DI are inside that build. `npm run verify:core` keeps it honest.
-
-### Added
-
 - Two rules on an instance against its type, which nothing checked before:
   M022 finds a Mandatory child the instance does not have, M023 a
   MandatoryPlaceholder nothing fills. Over the 24 released companion
@@ -22,6 +19,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- A declaration that overrides another keeps what the overridden one holds at
+  every depth, not only one level below the type: a child of a child used to
+  replace the one it overrides with everything below it.
 - A value of a structure carries the fields it inherits, not only the ones its
   own type adds: a NodeSet declares only the latter, and a server refuses a
   value that leaves the inherited ones out.
