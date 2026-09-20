@@ -149,7 +149,7 @@ export interface ModelInfo {
   modelUri: string;
   version?: string;
   publicationDate?: string;
-  requiredModels: { modelUri: string; version?: string; publicationDate?: string }[];
+  requiredModels: { modelUri: string; version?: string; publicationDate?: string; otherAttributes?: Record<string, string> }[];
   otherAttributes: Record<string, string>;
 }
 

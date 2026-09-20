@@ -18,6 +18,9 @@ const NAMED_NODE_ELEMENTS = new Set(['DisplayName', 'Description', 'References',
 type El = XmlElement;
 
 export function readNodeSet(xml: string): NodeSetFile {
+  // A file written on Windows often starts with a byte order mark, which the
+  // XML parser sees as content before the declaration.
+  if (xml.charCodeAt(0) === 0xfeff) xml = xml.slice(1);
   const errors: string[] = [];
   const doc = new DOMParser({ onError: (level, msg) => { if (level !== 'warning') errors.push(msg); } })
     .parseFromString(xml, 'text/xml');
@@ -26,8 +29,8 @@ export function readNodeSet(xml: string): NodeSetFile {
     throw new NodeSetFormatError(errors[0] ?? 'Not a NodeSet2 file: the root element is not UANodeSet.');
   }
 
-  const namespaceUris = children(root, 'NamespaceUris').flatMap(n => children(n, 'Uri')).map(u => textOf(u));
-  const serverUris = children(root, 'ServerUris').flatMap(n => children(n, 'Uri')).map(u => textOf(u));
+  const namespaceUris = children(root, 'NamespaceUris').flatMap(n => children(n, 'Uri')).map(u => nameOf(u));
+  const serverUris = children(root, 'ServerUris').flatMap(n => children(n, 'Uri')).map(u => nameOf(u));
   const table = [UA_NAMESPACE, ...namespaceUris];
 
   const resolveIndex = (index: number): string => {
@@ -37,7 +40,7 @@ export function readNodeSet(xml: string): NodeSetFile {
 
   const rawAliases = new Map<string, string>();
   for (const a of children(root, 'Aliases').flatMap(n => children(n, 'Alias'))) {
-    rawAliases.set(a.getAttribute('Alias') ?? '', textOf(a));
+    rawAliases.set(a.getAttribute('Alias') ?? '', nameOf(a));
   }
   const parseId = (raw: string): string => parseNodeIdText(raw, resolveIndex);
   const aliases = new Map<string, string>();
@@ -56,6 +59,8 @@ export function readNodeSet(xml: string): NodeSetFile {
       modelUri: r.getAttribute('ModelUri') ?? '',
       version: attr(r, 'Version'),
       publicationDate: attr(r, 'PublicationDate'),
+      // XmlSchemaUri, ModelVersion and the rest belong to the file, not to us.
+      otherAttributes: otherAttributes(r, new Set(['ModelUri', 'Version', 'PublicationDate'])),
     })),
     otherAttributes: otherAttributes(m, new Set(['ModelUri', 'Version', 'PublicationDate'])),
   }));
@@ -92,8 +97,8 @@ function readNode(
   if (!id) throw new NodeSetFormatError(`A ${e.localName} has no NodeId.`);
   const references: Reference[] = children(e, 'References').flatMap(r => children(r, 'Reference')).map(r => ({
     type: resolve(r.getAttribute('ReferenceType')) ?? '',
-    isForward: (r.getAttribute('IsForward') ?? 'true').toLowerCase() !== 'false',
-    target: resolve(textOf(r)) ?? '',
+    isForward: isTrue(r.getAttribute('IsForward') ?? 'true'),
+    target: resolve(nameOf(r)) ?? '',
   }));
   const value = children(e, 'Value')[0];
   const definition = children(e, 'Definition')[0];
@@ -142,10 +147,10 @@ function readArguments(value: El, resolve: (raw: string | null) => string | unde
   for (const eo of elementChildren(list[0])) {
     const typeId = path(eo, 'TypeId', 'Identifier');
     const body = path(eo, 'Body', 'Argument');
-    if (eo.localName !== 'ExtensionObject' || !typeId || textOf(typeId) !== ARGUMENT_XML_ENCODING || !body) return undefined;
+    if (eo.localName !== 'ExtensionObject' || !typeId || nameOf(typeId) !== ARGUMENT_XML_ENCODING || !body) return undefined;
     if (elementChildren(body).some(c => !known.has(c.localName ?? ''))) return undefined;
     const dataTypeId = path(body, 'DataType', 'Identifier');
-    const dataType = dataTypeId ? resolve(textOf(dataTypeId)) : undefined;
+    const dataType = dataTypeId ? resolve(nameOf(dataTypeId)) : undefined;
     if (!dataType) return undefined;
     const description = path(body, 'Description', 'Text');
     const locale = path(body, 'Description', 'Locale');
@@ -153,13 +158,15 @@ function readArguments(value: El, resolve: (raw: string | null) => string | unde
     const dimensions = path(body, 'ArrayDimensions');
     const name = path(body, 'Name');
     const arg: Argument = {
-      name: name ? textOf(name) : '',
+      name: name ? nameOf(name) : '',
       dataType,
-      valueRank: valueRank ? Number(textOf(valueRank)) : -1,
-      arrayDimensions: dimensions ? elementChildren(dimensions).map(d => Number(textOf(d))) : [],
+      valueRank: valueRank ? Number(nameOf(valueRank)) : -1,
+      arrayDimensions: dimensions ? elementChildren(dimensions).map(d => Number(nameOf(d))) : [],
     };
-    if (description && textOf(description)) {
-      arg.description = locale && textOf(locale) ? { text: textOf(description), locale: textOf(locale) } : { text: textOf(description) };
+    if (description) {
+      arg.description = locale && nameOf(locale)
+        ? { text: textOf(description), locale: nameOf(locale) }
+        : { text: textOf(description) };
     }
     result.push(arg);
   }
@@ -179,7 +186,7 @@ function readExtensionObjects(value: El, resolve: (raw: string | null) => string
     const identifier = path(eo, 'TypeId', 'Identifier');
     const body = path(eo, 'Body');
     if (eo.localName !== 'ExtensionObject' || !identifier || !body || elementChildren(eo).length !== 2) return undefined;
-    const typeId = resolve(textOf(identifier));
+    const typeId = resolve(nameOf(identifier));
     if (!typeId) return undefined;
     items.push({ typeId, bodyXml: innerXml(body, serializer) });
   }
@@ -259,7 +266,17 @@ function path(e: El, ...names: string[]): El | undefined {
   return current;
 }
 
+/**
+ * The text of an element as it stands. Trimming it would change what the file
+ * says: a description that ends in a space is written back without it, and a
+ * comparison against the original never falls silent again.
+ */
 function textOf(e: El): string {
+  return e.textContent ?? '';
+}
+
+/** The text of an element with the whitespace around it removed, for names and URIs. */
+function nameOf(e: El): string {
   return (e.textContent ?? '').trim();
 }
 
@@ -269,7 +286,17 @@ function attr(e: El, name: string): string | undefined {
 
 function bool(e: El, name: string): boolean | undefined {
   const v = attr(e, name);
-  return v === undefined ? undefined : v.toLowerCase() === 'true';
+  return v === undefined ? undefined : isTrue(v);
+}
+
+/**
+ * XML says a boolean is "true" or "1", and false is "false" or "0". Reading
+ * only "true" turns an abstract type into one that can be instantiated, an
+ * optional field into a mandatory one, and a reference around.
+ */
+function isTrue(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  return v === 'true' || v === '1';
 }
 
 function num(e: El, name: string): number | undefined {

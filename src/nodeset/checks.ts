@@ -1,4 +1,4 @@
-﻿// Checks on the model being edited, following OPC 10000-3. Findings are
+// Checks on the model being edited, following OPC 10000-3. Findings are
 // advice while editing; nothing prevents saving a model with findings.
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
@@ -53,9 +53,20 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       if (!space.get(r.type)) add('M001', 'error', n, `the reference type ${r.type} is unknown.`);
     }
 
-    const names = new Map<string, number>();
-    for (const c of space.children(n)) names.set(c.node.browseName.name, (names.get(c.node.browseName.name) ?? 0) + 1);
-    for (const [name, count] of names) if (count > 1) add('M002', 'error', n, `${count} children are named '${name}'.`);
+    // A BrowseName is unique with its namespace, not without it: a type may
+    // well hold its own NodeVersion beside the one of the UA namespace. And
+    // only the declarations of a type must be unique; instances may repeat a
+    // name.
+    if (TYPE_CLASSES.has(n.nodeClass)) {
+      const names = new Map<string, number>();
+      for (const c of space.children(n)) {
+        const key = `${c.node.browseName.namespaceUri}|${c.node.browseName.name}`;
+        names.set(key, (names.get(key) ?? 0) + 1);
+      }
+      for (const [key, count] of names) {
+        if (count > 1) add('M002', 'error', n, `${count} children are named '${key.split('|')[1]}'.`);
+      }
+    }
 
     if ((n.nodeClass === 'Object' || n.nodeClass === 'Variable') && !space.typeDefinition(n)) {
       add('M003', 'error', n, 'it has no TypeDefinition.');
@@ -87,14 +98,25 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       add('M008', 'warning', n, 'it has no InverseName.');
     }
     if (n.nodeClass === 'DataType' && !n.isAbstract && space.isSubtypeOf(n.id, uaKey(22))
-      && !space.out(n.id, uaKey(38), false).some(e => space.get(e.target)?.browseName.name === 'Default Binary')) {
-      add('M010', 'warning', n, 'it has no "Default Binary" encoding.');
+      && !space.out(n.id, uaKey(38), false)
+        .some(e => space.get(e.target)?.browseName.name === 'Default Binary'
+                   || space.get(e.target)?.browseName.name === 'Default XML')) {
+      add('M010', 'warning', n, 'it has neither a "Default Binary" nor a "Default XML" encoding.');
     }
+    // A definition holds the fields a type adds; the ones it inherits stay
+    // where they were declared, so a structure with an empty definition is
+    // only empty when no supertype of it has fields either.
     if (n.nodeClass === 'DataType' && !n.isAbstract && (space.isSubtypeOf(n.id, uaKey(22)) || space.isSubtypeOf(n.id, uaKey(29)))
-      && !n.definition?.fields.length) {
-      add('M011', 'warning', n, 'it has no fields.');
+      && !inheritedFields(space, n)) {
+      add('M011', 'warning', n, 'it and the types it derives from have no fields.');
     }
-    if (!file.namespaceUris.includes(parseNodeIdKey(n.id).namespaceUri)) {
+    // The model owns what its Models section declares. The namespace table
+    // does not say it: the base model has no table at all, and every one of
+    // its nodes would be a foreigner in its own file.
+    const owned = file.models.length > 0
+      ? file.models.map(m => m.modelUri)
+      : file.namespaceUris;
+    if (!owned.includes(parseNodeIdKey(n.id).namespaceUri)) {
       add('M012', 'error', n, `its NodeId is in ${parseNodeIdKey(n.id).namespaceUri}, which the model does not own.`);
     }
 
@@ -113,7 +135,11 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 
     const placeholder = rule === RULE.MandatoryPlaceholder || rule === RULE.OptionalPlaceholder;
     const angled = /<.+>/.test(n.browseName.name);
-    if (placeholder && !angled) add('M015', 'warning', n, 'it is a placeholder but not named <like this>.');
+    // A placeholder method keeps its name: what the instance may choose are
+    // its arguments, not what it is called.
+    if (placeholder && !angled && n.nodeClass !== 'Method') {
+      add('M015', 'warning', n, 'it is a placeholder but not named <like this>.');
+    }
     if (!placeholder && angled && rule) add('M015', 'warning', n, 'it is named <like a placeholder> but its ModellingRule is not one.');
 
     for (const e of space.out(n.id, REF.HasProperty, false)) {
@@ -188,6 +214,16 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 const STANDARD_PROPERTIES = new Set([
   'EnumStrings', 'EnumValues', 'OptionSetValues', 'DefaultInstanceBrowseName', 'NodeVersion',
 ]);
+
+/** Whether the DataType or one of the types it derives from declares a field. */
+function inheritedFields(space: AddressSpace, n: UaNode): boolean {
+  const seen = new Set<string>();
+  for (let t: UaNode | undefined = n; t && !seen.has(t.id); t = space.get(space.supertypeKey(t.id) ?? '')) {
+    seen.add(t.id);
+    if (t.definition?.fields.length) return true;
+  }
+  return false;
+}
 
 export function insideType(space: AddressSpace, n: UaNode): boolean {
   const seen = new Set<string>();

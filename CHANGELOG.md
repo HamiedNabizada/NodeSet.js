@@ -14,6 +14,23 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- A boolean written as `1` or `0`, which XML allows, was read as the opposite:
+  an abstract type became instantiable, an optional structure field mandatory,
+  and `IsForward="0"` turned a reference around. Found by an audit over the
+  published companion specifications, where nothing spells it that way yet.
+- A description is written back with the whitespace it had, a required model
+  keeps the attributes it carries (`XmlSchemaUri`, `ModelVersion`), an empty
+  argument description keeps its locale, a file that starts with a byte order
+  mark opens at all (one released companion specification does), and `Value`
+  is written before the elements the modeler does not know, which the schema
+  demands. All 37 NodeSets on hand now read and write back with no difference
+  at all.
+- Rules that fired on released models: M012 reported every node of the base
+  model as foreign (5476 errors), M002 counted names without their namespace,
+  M011 asked a structure for the fields it inherits, M010 insisted on a
+  "Default Binary" encoding where the specification allows "Default XML", and
+  M015 asked a placeholder method to be named in angle brackets, which is for
+  objects and variables.
 - References that are not the ones holding a child now run on rails beside the
   shapes instead of crossing them, and their names sit on the longest straight
   piece of the line, on a sheet of their own.

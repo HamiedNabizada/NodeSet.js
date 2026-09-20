@@ -54,7 +54,7 @@ export function writeNodeSet(file: NodeSetFile): string {
       }
       out.push(`    <Model${own}>`);
       for (const r of m.requiredModels) {
-        out.push(`      <RequiredModel${attributes({ ModelUri: r.modelUri, Version: r.version, PublicationDate: r.publicationDate })} />`);
+        out.push(`      <RequiredModel${attributes({ ModelUri: r.modelUri, Version: r.version, PublicationDate: r.publicationDate, ...r.otherAttributes })} />`);
       }
       out.push('    </Model>');
     }
@@ -104,12 +104,14 @@ function writeNode(
     }
     out.push('    </References>');
   }
-  for (const raw of late) out.push('    ' + raw);
-  for (const inv of n.inverseName ?? []) out.push(`    ${localized('InverseName', inv)}`);
-  if (n.definition) writeDefinition(out, n.definition, refText, qn);
+  // The Value comes before whatever else the file carried (a Translation, for
+  // one), because that is the order the schema prescribes.
   if (n.arguments) writeArguments(out, n.arguments, idText);
   else if (n.extensionObjects) writeExtensionObjects(out, n.extensionObjects, idText);
   else if (n.valueXml !== undefined) out.push(`    <Value>${n.valueXml}</Value>`);
+  for (const raw of late) out.push('    ' + raw);
+  for (const inv of n.inverseName ?? []) out.push(`    ${localized('InverseName', inv)}`);
+  if (n.definition) writeDefinition(out, n.definition, refText, qn);
   out.push(`  </UA${n.nodeClass}>`);
 }
 
