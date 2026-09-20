@@ -63,6 +63,19 @@ Added after M6, from a review of what was missing:
   without closing. Structure values escape the
   namespace URI and leave out types whose names XML cannot carry.
 
+- The rules were measured against the 23 companion specifications the OPC
+  Foundation publishes (2026-09-20): they fired about 2250 times on models that
+  are released and correct. Four rules were opinions rather than requirements
+  and were narrowed: a BrowseName from another model is normal for a
+  declaration that overrides an inherited one and for an instance, so M009 now
+  only looks at types; the standard properties (EnumStrings, EnumValues,
+  OptionSetValues, DefaultInstanceBrowseName, NodeVersion) carry no
+  ModellingRule by design (M006); a placeholder may be named
+  "Actual_<No.>", not only "<Name>" (M015); and a machine that numbers none of
+  its states leaves the numbers to its instances, while one that numbers some
+  has forgotten the rest (M021). What remains on the corpus is 811 findings,
+  619 of them in one example model whose required models are not on disk.
+
 - A catalogue of rules on the NodeSet itself (`checks.ts`, M001 to M021):
   besides the earlier ones on types and instances, a NodeId in a namespace the
   model does not own, ValueRank against ArrayDimensions, a method argument of

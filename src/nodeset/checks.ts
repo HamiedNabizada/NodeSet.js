@@ -1,4 +1,4 @@
-// Checks on the model being edited, following OPC 10000-3. Findings are
+﻿// Checks on the model being edited, following OPC 10000-3. Findings are
 // advice while editing; nothing prevents saving a model with findings.
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
@@ -74,7 +74,8 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       && (space.isSubtypeOf(definition, SM.StateType) || space.isSubtypeOf(definition, SM.TransitionType));
 
     const rule = space.modellingRule(n);
-    if (!TYPE_CLASSES.has(n.nodeClass) && !rule && !partOfMachine && insideType(space, n)) {
+    if (!TYPE_CLASSES.has(n.nodeClass) && !rule && !partOfMachine && !STANDARD_PROPERTIES.has(n.browseName.name)
+        && insideType(space, n)) {
       add('M006', 'warning', n, 'it is part of a type but has no ModellingRule, so instances will not get it.');
     }
     const typeDefinition = space.typeDefinition(n);
@@ -111,7 +112,7 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     }
 
     const placeholder = rule === RULE.MandatoryPlaceholder || rule === RULE.OptionalPlaceholder;
-    const angled = /^<.+>$/.test(n.browseName.name);
+    const angled = /<.+>/.test(n.browseName.name);
     if (placeholder && !angled) add('M015', 'warning', n, 'it is a placeholder but not named <like this>.');
     if (!placeholder && angled && rule) add('M015', 'warning', n, 'it is named <like a placeholder> but its ModellingRule is not one.');
 
@@ -151,9 +152,14 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       }
       for (const [what, items] of [['state', machine.states], ['transition', machine.transitions]] as const) {
         const numbers = new Map<number, number>();
+        // A machine that numbers none of them leaves the numbers to its
+        // instances, as released companion specifications do; one that numbers
+        // some and not others has forgotten the rest.
+        const numbered = items.some(i => i.number !== undefined);
         for (const i of items) {
-          if (i.number === undefined) add('M021', 'warning', n, `the ${what} '${i.name}' has no number.`);
-          else numbers.set(i.number, (numbers.get(i.number) ?? 0) + 1);
+          if (i.number === undefined) {
+            if (numbered) add('M021', 'warning', n, `the ${what} '${i.name}' has no number, while others have one.`);
+          } else numbers.set(i.number, (numbers.get(i.number) ?? 0) + 1);
         }
         for (const [number, count] of numbers) {
           if (count > 1) add('M021', 'error', n, `${count} ${what}s share the number ${number}.`);
@@ -161,8 +167,13 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       }
     }
 
-    // Standard properties (InputArguments, EnumStrings …) keep their BrowseName in the UA namespace.
-    if (!n.id.startsWith(n.browseName.namespaceUri + '|') && n.browseName.namespaceUri !== UA_NAMESPACE) {
+    // A BrowseName from another model is normal almost everywhere: a type that
+    // overrides an inherited child keeps the name of the model that declared
+    // it, an instance keeps the name of the declaration it fills, and the
+    // standard properties keep the UA namespace. A type itself, though, names
+    // itself, so a foreign namespace there is a mistake.
+    if (TYPE_CLASSES.has(n.nodeClass) && !n.id.startsWith(n.browseName.namespaceUri + '|')
+        && n.browseName.namespaceUri !== UA_NAMESPACE) {
       add('M009', 'warning', n, `its BrowseName is in ${n.browseName.namespaceUri}.`);
     }
   }
@@ -170,6 +181,14 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 }
 
 /** Whether a node is held, directly or through other declarations, by a type. */
+/**
+ * Properties the specification gives a type without a ModellingRule, because
+ * they describe the type itself rather than what an instance gets.
+ */
+const STANDARD_PROPERTIES = new Set([
+  'EnumStrings', 'EnumValues', 'OptionSetValues', 'DefaultInstanceBrowseName', 'NodeVersion',
+]);
+
 export function insideType(space: AddressSpace, n: UaNode): boolean {
   const seen = new Set<string>();
   for (let p = space.parentOf(n); p && !seen.has(p.id); p = space.parentOf(p)) {

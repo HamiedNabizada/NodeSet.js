@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+﻿import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REF, RULE } from '../../src/nodeset/address-space';
 import { check } from '../../src/nodeset/checks';
@@ -92,5 +92,75 @@ describe('Rules on the NodeSet itself', () => {
     e.setSymmetric(reference, true);
     e.setInverseName(reference, 'RunsWith');
     expect(rules()).toContain('M018');
+  });
+});
+
+describe('Checks against real models', () => {
+  // The rules used to fire more than two thousand times on the companion
+  // specifications the OPC Foundation publishes. A rule that a released model
+  // breaks is a rule about us, not about the model.
+
+  it('does not mind a declaration that keeps the name of the model that declared it', async () => {
+    // A type of our model overrides a child inherited from DI, which keeps its
+    // BrowseName in the DI namespace. That is how overriding works (M009).
+    const ws = new Workspace();
+    await ws.create('http://example.org/Device/');
+    await ws.addBundled('http://opcfoundation.org/UA/DI/');
+    const editor = ws.editor!;
+    const type = editor.addType('ObjectType', 'MyDeviceType');
+    const child = editor.addDeclaration(type, 'Object', 'ParameterSet');
+    const node = editor.file.nodes.find(n => n.id === child)!;
+    node.browseName = { namespaceUri: 'http://opcfoundation.org/UA/DI/', name: 'ParameterSet' };
+    editor.rename(type, 'MyDeviceType');
+
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M009')).toEqual([]);
+  });
+
+  it('does not ask a standard property for a ModellingRule', async () => {
+    // EnumStrings and DefaultInstanceBrowseName describe the type itself and
+    // carry no rule, as every released model shows (M006).
+    const ws = new Workspace();
+    await ws.create('http://example.org/Device/');
+    const editor = ws.editor!;
+    const type = editor.addType('ObjectType', 'MyDeviceType');
+    const property = editor.addDeclaration(type, 'Variable', 'DefaultInstanceBrowseName');
+    editor.setModellingRule(property, undefined);
+
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M006')).toEqual([]);
+  });
+
+  it('accepts a placeholder named the way companion specifications name them', async () => {
+    // "ActualTemperature_<No.>" is a placeholder too, not only "<Name>" (M015).
+    const ws = new Workspace();
+    await ws.create('http://example.org/Device/');
+    const editor = ws.editor!;
+    const type = editor.addType('ObjectType', 'MyDeviceType');
+    const child = editor.addDeclaration(type, 'Variable', 'ActualTemperature_<No.>');
+    editor.setModellingRule(child, RULE.MandatoryPlaceholder);
+
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M015')).toEqual([]);
+  });
+
+  it('leaves the numbers of a machine alone until one of them has a number', async () => {
+    // PackML declares its transitions without numbers and leaves them to the
+    // instances; a machine that numbers some and not others is the mistake (M021).
+    const ws = new Workspace();
+    await ws.create('http://example.org/Machine/');
+    const editor = ws.editor!;
+    const type = editor.addStateMachineType('MachineStateMachineType');
+    const idle = editor.addState(type, 'Idle', 1);
+    const running = editor.addState(type, 'Running', 2);
+    editor.addTransition(type, 'IdleToRunning', 1, idle, running);
+    const numbers = editor.file.nodes.filter(n => n.browseName.name === 'StateNumber' || n.browseName.name === 'TransitionNumber');
+    for (const n of numbers) n.valueXml = undefined;
+    editor.rename(type, 'MachineStateMachineType');
+
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M021')).toEqual([]);
+
+    // One of them numbered again: now the others are missing something.
+    const one = editor.file.nodes.find(n => n.browseName.name === 'StateNumber')!;
+    one.valueXml = '<uax:UInt32 xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd">1</uax:UInt32>';
+    editor.rename(type, 'MachineStateMachineType');
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M021').length).toBeGreaterThan(0);
   });
 });
