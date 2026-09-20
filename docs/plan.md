@@ -89,6 +89,13 @@ Added after M6, from a review of what was missing:
   variable per row, as one step that undo takes back; a bad row stops the
   import with its line and keeps nothing (`csv.ts`, `ModelEditor.batch`).
 
+- Two entries into the library: `nodeset-js` brings the canvas and the app and
+  needs a browser; `nodeset-js/core` is the NodeSet layer alone (reading,
+  writing, address space, editor, checks, state machines, workspace) and runs
+  in Node, with the base model and DI inside the build. `npm run verify:core`
+  builds a model in Node after every library build, so the entry cannot quietly
+  grow a dependency on a window.
+
 Not done: structure fields that allow subtypes (their values name their own
 type), matrices, a test inside the AutomationML Editor itself.
 

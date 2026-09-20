@@ -265,6 +265,17 @@ conditions on the FPB model instead of clicks.
 into a hierarchy is stored as an attribute at the element that stands for
 the server, so "mirror again" needs neither settings nor a new selection.
 
+**A library that only runs in a browser cannot be scripted.** The library
+build carried the canvas, React and a stylesheet, so `require()` in Node died
+on `document`. Everything worth scripting (read a file, change the model,
+check it, write it back) sits below the canvas and needs no window. A second
+entry that exports only that layer turns the modeler into something a build
+pipeline can use, and it costs one file and one webpack output. A check that
+runs the built file in Node keeps it that way, because the dependency creeps
+back in through one careless import.
+*FPB.js:* the same split applies, and it is the one thing that would let a
+script generate or migrate FPB models without a page.
+
 ## Tooling
 
 **Big data as lazy chunks.** The 4 MB base NodeSet is an `asset/source`
