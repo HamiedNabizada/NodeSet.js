@@ -36,6 +36,8 @@ export const RULES: Record<string, string> = {
   M019: 'No reference at all leads to a node: it is part of no type and no hierarchy.',
   M020: 'A transition of a state machine does not name both of its ends.',
   M021: 'A state or transition has no number, or two of them share one.',
+  M022: 'An instance is missing a child its type declares as Mandatory.',
+  M023: 'An instance fills none of a MandatoryPlaceholder its type declares.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -193,6 +195,26 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       }
     }
 
+    // An instance against its type: what the type promises, the instance has
+    // to have (OPC 10000-3 6.4.4.4). Nothing checked this, so a model a server
+    // would refuse saved without a word.
+    if ((n.nodeClass === 'Object' || n.nodeClass === 'Variable') && !rule && !insideType(space, n)) {
+      const type = space.typeDefinition(n);
+      if (type) {
+        const children = new Set(space.children(n).map(c => `${c.node.browseName.namespaceUri}|${c.node.browseName.name}`));
+        for (const declaration of declarationsOf(space, type)) {
+          const declarationRule = space.modellingRule(declaration);
+          const key = `${declaration.browseName.namespaceUri}|${declaration.browseName.name}`;
+          if (declarationRule === RULE.Mandatory && !children.has(key)) {
+            add('M022', 'error', n, `it has no '${declaration.browseName.name}', which ${label(type)} declares as Mandatory.`);
+          }
+          if (declarationRule === RULE.MandatoryPlaceholder && !filled(space, n, declaration)) {
+            add('M023', 'error', n, `nothing fills '${declaration.browseName.name}', which ${label(type)} declares as a MandatoryPlaceholder.`);
+          }
+        }
+      }
+    }
+
     // A BrowseName from another model is normal almost everywhere: a type that
     // overrides an inherited child keeps the name of the model that declared
     // it, an instance keeps the name of the declaration it fills, and the
@@ -214,6 +236,36 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
 const STANDARD_PROPERTIES = new Set([
   'EnumStrings', 'EnumValues', 'OptionSetValues', 'DefaultInstanceBrowseName', 'NodeVersion',
 ]);
+
+/** The declarations of a type and of the types it derives from, the most specific winning. */
+function declarationsOf(space: AddressSpace, type: UaNode): UaNode[] {
+  const byName = new Map<string, UaNode>();
+  for (const t of space.typeChain(type)) {
+    for (const c of space.children(t)) {
+      const key = `${c.node.browseName.namespaceUri}|${c.node.browseName.name}`;
+      if (!byName.has(key)) byName.set(key, c.node);
+    }
+  }
+  return [...byName.values()];
+}
+
+/**
+ * Whether a child of the instance fills the placeholder: one that instantiates
+ * its type and is not the placeholder itself. A placeholder object or variable
+ * is filled under a name of its own, a placeholder method keeps the name its
+ * declaration gives it.
+ */
+function filled(space: AddressSpace, instance: UaNode, declaration: UaNode): boolean {
+  const wanted = space.typeDefinition(declaration)?.id;
+  return space.children(instance).some(c => {
+    if (space.modellingRule(c.node) === RULE.MandatoryPlaceholder
+        || space.modellingRule(c.node) === RULE.OptionalPlaceholder) return false;
+    if (c.node.nodeClass !== declaration.nodeClass) return false;
+    if (!wanted) return true;
+    const type = space.typeDefinition(c.node);
+    return type !== undefined && space.isSubtypeOf(type.id, wanted);
+  });
+}
 
 /** Whether the DataType or one of the types it derives from declares a field. */
 function inheritedFields(space: AddressSpace, n: UaNode): boolean {

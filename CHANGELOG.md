@@ -12,8 +12,19 @@ Until 1.0.0 the library's shape may still change between minor versions.
   without React, so a script can build and check a NodeSet in Node. The base
   model and DI are inside that build. `npm run verify:core` keeps it honest.
 
+### Added
+
+- Two rules on an instance against its type, which nothing checked before:
+  M022 finds a Mandatory child the instance does not have, M023 a
+  MandatoryPlaceholder nothing fills. Over the 24 released companion
+  specifications they fire twice, both times on an example model that is
+  indeed missing a Mandatory child.
+
 ### Fixed
 
+- A value of a structure carries the fields it inherits, not only the ones its
+  own type adds: a NodeSet declares only the latter, and a server refuses a
+  value that leaves the inherited ones out.
 - A boolean written as `1` or `0`, which XML allows, was read as the opposite:
   an abstract type became instantiable, an optional structure field mandatory,
   and `IsForward="0"` turned a reference around. Found by an audit over the

@@ -15,7 +15,7 @@
 
 import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { AddressSpace } from './address-space';
-import { ExtensionObjectValue, UA_NAMESPACE, UaNode, uaKey } from './model';
+import { DefinitionField, ExtensionObjectValue, UA_NAMESPACE, UaNode, uaKey } from './model';
 import { TYPES_NS, ValueError, builtInOf, childElements, element, scalarText } from './values';
 
 export interface FieldShape {
@@ -64,13 +64,16 @@ const UNION = uaKey(12756);
 export function structShape(space: AddressSpace, key: string | undefined, seen = new Set<string>()): StructShape | undefined {
   const t = space.get(key);
   if (!t || !key || t.nodeClass !== 'DataType' || !t.definition || !space.isSubtypeOf(t.id, STRUCTURE)) return undefined;
-  if (t.definition.fields.length === 0) return undefined;
+  // A definition holds the fields the type adds; a subtype's value carries the
+  // inherited ones first, and a server refuses a value that leaves them out.
+  const all = allFields(space, t);
+  if (all.length === 0) return undefined;
   // Names become element names of the encoding; a name XML cannot carry is not edited here.
-  if (!isXmlName(t.definition.name.name) || t.definition.fields.some(f => !isXmlName(f.name))) return undefined;
+  if (!isXmlName(t.definition.name.name) || all.some(f => !isXmlName(f.name))) return undefined;
   seen.add(key);
   const union = space.isSubtypeOf(t.id, UNION) || t.definition.otherAttributes.IsUnion === 'true';
   const fields: FieldShape[] = [];
-  for (const f of t.definition.fields) {
+  for (const f of all) {
     const rank = f.valueRank ?? -1;
     if (!f.dataType || (rank !== -1 && rank !== 1) || f.otherAttributes.AllowSubTypes === 'true') return undefined;
     const base = { name: f.name, array: rank === 1, optional: f.isOptional === true };
@@ -89,6 +92,31 @@ export function structShape(space: AddressSpace, key: string | undefined, seen =
   const namespaceUri = t.id.startsWith(UA_NAMESPACE + '|') ? TYPES_NS : t.definition.name.namespaceUri;
   const encoding = space.out(t.id, uaKey(38)).map(e => space.get(e.target)).find(n => n?.browseName.name === 'Default XML');
   return { key, element: t.definition.name.name, namespaceUri, encoding: encoding?.id, union, fields };
+}
+
+/**
+ * The fields of a structure, the inherited ones first: a value of a subtype
+ * is encoded as the fields of its supertypes followed by its own (OPC 10000-6
+ * 5.3.6). A NodeSet writes only the fields a type adds, so they have to be
+ * gathered along the chain.
+ */
+function allFields(space: AddressSpace, t: UaNode): DefinitionField[] {
+  const chain: UaNode[] = [];
+  const visited = new Set<string>();
+  for (let current: UaNode | undefined = t; current && !visited.has(current.id);) {
+    visited.add(current.id);
+    chain.unshift(current);
+    if (!space.isSubtypeOf(current.id, STRUCTURE) || current.id === uaKey(22)) break;
+    current = space.get(space.supertypeKey(current.id) ?? '');
+  }
+  const fields: DefinitionField[] = [];
+  for (const type of chain) {
+    for (const f of type.definition?.fields ?? []) {
+      // A subtype may not redeclare a field, but a file may repeat one.
+      if (!fields.some(other => other.name === f.name)) fields.push(f);
+    }
+  }
+  return fields;
 }
 
 /** A name XML allows for an element without escaping (ASCII letters, digits, '_', '-', '.'). */
