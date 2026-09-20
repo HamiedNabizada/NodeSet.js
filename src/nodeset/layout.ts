@@ -8,10 +8,10 @@ import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom'
 import { NodeSetFile, parseNodeIdKey } from './model';
 import { parseNodeIdText } from './reader';
 
-export const LAYOUT_NAMESPACE = 'urn:infomodel-js:diagram-layout:1';
+export const LAYOUT_NAMESPACE = 'urn:nodeset-js:diagram-layout:1';
 
-/** The namespace of layouts written before the modeler had its name; still read, replaced on writing. */
-const EARLIER_NAMESPACES = ['urn:ua-modeler:diagram-layout:1'];
+/** The namespaces of layouts written under earlier names; still read, replaced on writing. */
+const EARLIER_NAMESPACES = ['urn:infomodel-js:diagram-layout:1', 'urn:ua-modeler:diagram-layout:1'];
 const ALL_NAMESPACES = [LAYOUT_NAMESPACE, ...EARLIER_NAMESPACES];
 
 export interface Position { x: number; y: number }

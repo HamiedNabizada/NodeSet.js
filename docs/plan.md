@@ -101,8 +101,14 @@ type), matrices, a test inside the AutomationML Editor itself.
 - **Logic in TypeScript.** The type system and instantiation exist here and in
   the C# core of AMLOpcUa. The modeler works on NodeSets alone; everything
   AutomationML stays in C#.
-- **Name.** InfoModel.js, since 2026-09-19: it models OPC UA information
-  models, as FPB.js models formalized process descriptions. The working title
-  "UaModeler" is a product of Unified Automation; "OPC UA Modeler" (Prosys,
-  Sterfive) and "UA NodeSet Editor" (OPC Foundation) are taken too. Layouts
-  saved under the working title's namespace are still read.
+- **Name.** NodeSet.js, since 2026-09-20, after the working title "UaModeler"
+  and the short-lived "InfoModel.js". Named after the format it edits, as
+  bpmn-js and dmn-js are: everyone in OPC UA knows what a NodeSet is, while
+  "information model" also means something in the AAS, in AutomationML and in
+  IEC 61360. The names of the other tools are taken and defended: UaModeler,
+  UaExpert and UaGateway are trademarks of Unified Automation, and a name in
+  that series would sit in the same product class with the same audience;
+  "OPC UA Modeler" (Prosys, Sterfive) and "UA NodeSet Editor" (OPC Foundation)
+  are taken as well. "NodeSet" itself is a term of the specification that
+  everyone in the field uses descriptively and nobody holds as a product name.
+  Layouts saved under the earlier namespaces are still read.

@@ -1,11 +1,12 @@
-# InfoModel.js
+# NodeSet.js
 
 A graphical modeler for OPC UA information models. Types and instances are
 drawn in the notation of OPC 10000-3 Annex C and stored as NodeSet2 files,
-with nothing in between. It runs in the browser and is embedded in the
-AutomationML Editor plugin [AMLOpcUa](../AMLOpcUa), which connects the models
-to AutomationML (OPC 10000-83 Annex A, AML-UA-XSLT rules) and to VDI 3682
-process descriptions.
+with nothing in between: the file it opens and the file it writes are the
+NodeSets every other OPC UA tool reads. It runs in the browser on its own, and
+it embeds: the AutomationML Editor plugin [AMLOpcUa](../AMLOpcUa) hosts it and
+connects the models to AutomationML (OPC 10000-83 Annex A, AML-UA-XSLT rules)
+and to VDI 3682 process descriptions.
 
 What it does: types (ObjectTypes, VariableTypes, DataTypes with fields,
 encodings, enumeration values, OptionSets and unions, ReferenceTypes), instance declarations with
@@ -44,7 +45,7 @@ npm run build       # dist/web (the app) and dist/lib (the library)
 ```
 
 ```ts
-import { readNodeSet, writeNodeSet, Workspace, InfoModeler, App } from 'infomodel-js';
+import { readNodeSet, writeNodeSet, Workspace, NodeSetModeler, App } from 'nodeset-js';
 
 const ws = new Workspace();
 await ws.open(xml);                         // loads the required UA and DI models
@@ -53,5 +54,5 @@ ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
 const nodeSet = ws.save();                  // NodeSet2 XML
 ```
 
-`App` is the complete modeler as a React component; `InfoModeler` is the canvas
-alone. React 18 is a peer dependency.
+`App` is the complete modeler as a React component; `NodeSetModeler` is the
+canvas alone. React 18 is a peer dependency.

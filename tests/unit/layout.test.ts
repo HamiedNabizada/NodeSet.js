@@ -44,7 +44,7 @@ describe('Layouts of earlier versions', () => {
     expect(layout.get('http://example.org/Old/|i=1')?.get('http://example.org/Old/|i=2')).toEqual({ x: 10, y: 20 });
     writeLayout(file, layout);
     const written = file.otherElements.join('');
-    expect(written).toContain('urn:infomodel-js:diagram-layout:1');
+    expect(written).toContain('urn:nodeset-js:diagram-layout:1');
     expect(written).not.toContain('urn:ua-modeler:diagram-layout:1');
   });
 });

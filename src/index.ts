@@ -14,7 +14,7 @@ export type { Layout, Position } from './nodeset/layout';
 export { Workspace } from './workspace';
 export { buildTypeDiagram } from './modeler/diagram-model';
 export type { Diagram, DiagramLine, DiagramShape, TypeDiagramOptions } from './modeler/diagram-model';
-export { InfoModeler } from './modeler/Modeler';
+export { NodeSetModeler } from './modeler/Modeler';
 export { applyTheme, HostBridge } from './host/bridge';
 export type { HostToModeler, ModelerToHost } from './host/bridge';
 export { App } from './ui/App';

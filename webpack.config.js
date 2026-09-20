@@ -17,7 +17,7 @@ module.exports = (env, argv) => ({
       { test: /\.xml$/, type: 'asset/source' },
     ],
   },
-  plugins: [new HtmlWebpackPlugin({ template: './app/index.html', title: 'InfoModel.js' })],
+  plugins: [new HtmlWebpackPlugin({ template: './app/index.html', title: 'NodeSet.js' })],
   devServer: { port: 3002, hot: true },
   // The base NodeSet is a lazy chunk of several MB by nature.
   performance: { hints: false },
