@@ -19,6 +19,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- The state chart draws the way there and the way back apart: on one line the
+  two arrows and their names covered each other.
 - A declaration that overrides another keeps what the overridden one holds at
   every depth, not only one level below the type: a child of a child used to
   replace the one it overrides with everything below it.

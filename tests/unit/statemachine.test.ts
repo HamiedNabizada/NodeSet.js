@@ -85,4 +85,19 @@ describe('Finite state machines', () => {
     expect(svg).toContain('IdleToRunning / Start()');
     expect(svg.match(/<line /g)).toHaveLength(1);
   });
+
+  it('draws the way there and the way back apart', async () => {
+    // On one line the two cover each other, and one name hides the other.
+    const { ws, e, type, idle, running } = await machine();
+    e.addTransition(type, 'RunningToIdle', 2, running, idle);
+
+    const svg = stateChartSvg(readStateMachine(ws.space, ws.space.get(type)!));
+
+    expect(svg.match(/<line /g)).toBeNull();
+    expect(svg.match(/ Q /g)).toHaveLength(2);
+    const places = [...svg.matchAll(/<text x="([-\d.]+)" y="([-\d.]+)"[^>]*>(IdleToRunning[^<]*|RunningToIdle)</g)]
+      .map(m => `${m[1]},${m[2]}`);
+    expect(places).toHaveLength(2);
+    expect(new Set(places).size).toBe(2);
+  });
 });
