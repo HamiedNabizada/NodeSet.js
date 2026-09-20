@@ -76,6 +76,13 @@ function optionBits(space: AddressSpace, dataType: string): number | undefined {
   return space.isSubtypeOf(dataType, OPTION_SET) ? undefined : 64;
 }
 
+/** One declaration of a type, with the declarations it overrides, the base first. */
+interface Declaration {
+  node: UaNode;
+  refType: string;
+  overrides: UaNode[];
+}
+
 function qualified(n: UaNode): string {
   return `${n.browseName.namespaceUri}|${n.browseName.name}`;
 }
@@ -727,39 +734,69 @@ export class ModelEditor {
   optionalPaths(type: string): string[] {
     const space = this.space();
     const paths: string[] = [];
-    const walk = (declarations: Map<string, { node: UaNode; refType: string }>, path: string, depth: number) => {
+    const walk = (declarations: Map<string, Declaration>, path: string, depth: number) => {
       if (depth > 20) return;
-      for (const { node: d } of declarations.values()) {
+      for (const declaration of declarations.values()) {
+        const d = declaration.node;
         const rule = space.modellingRule(d);
         if (rule !== RULE.Mandatory && rule !== RULE.Optional) continue;
         const p = path ? `${path}/${d.browseName.name}` : d.browseName.name;
         if (rule === RULE.Optional) paths.push(p);
-        const typeDefinition = space.typeDefinition(d);
-        const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, { node: UaNode; refType: string }>();
-        for (const own of space.children(d)) inner.set(qualified(own.node), { node: own.node, refType: own.edge.type });
-        walk(inner, p, depth + 1);
+        walk(this.childrenOf(declaration), p, depth + 1);
       }
     };
     if (space.get(type)) walk(this.declarationsOf(type), '', 0);
     return paths;
   }
 
-  /** The effective declarations of a type: its own and its supertypes', by BrowseName, the most specific winning. */
-  private declarationsOf(type: string): Map<string, { node: UaNode; refType: string }> {
+  /**
+   * The effective declarations of a type: its own and its supertypes', by
+   * BrowseName with its namespace, the most specific winning. A declaration
+   * that overrides another keeps the one it overrides, because the children
+   * of both belong to the instance (OPC 10000-3, the fully inherited instance
+   * declaration hierarchy).
+   */
+  private declarationsOf(type: string): Map<string, Declaration> {
     const space = this.space();
-    const result = new Map<string, { node: UaNode; refType: string }>();
-    const chain = space.typeChain(space.get(type)!).reverse();
+    const result = new Map<string, Declaration>();
+    const chain = space.typeChain(space.get(type)!).reverse();   // the base first
     for (const t of chain) {
-      for (const c of space.children(t)) result.set(qualified(c.node), { node: c.node, refType: c.edge.type });
+      for (const c of space.children(t)) {
+        const key = qualified(c.node);
+        const previous = result.get(key);
+        result.set(key, {
+          node: c.node,
+          refType: c.edge.type,
+          overrides: previous ? [...previous.overrides, previous.node] : [],
+        });
+      }
     }
     return result;
   }
 
-  private fill(parent: UaNode, declarations: Map<string, { node: UaNode; refType: string }>, path: string,
+  /**
+   * What an instance gets below one declaration: the declarations of its type,
+   * then the children the declaration and every declaration it overrides carry
+   * themselves, the most specific winning.
+   */
+  private childrenOf(d: Declaration): Map<string, Declaration> {
+    const space = this.space();
+    const typeDefinition = space.typeDefinition(d.node);
+    const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, Declaration>();
+    for (const over of [...d.overrides, d.node]) {
+      for (const own of space.children(over)) {
+        inner.set(qualified(own.node), { node: own.node, refType: own.edge.type, overrides: [] });
+      }
+    }
+    return inner;
+  }
+
+  private fill(parent: UaNode, declarations: Map<string, Declaration>, path: string,
     options: InstantiateOptions, mapping: Map<string, string>, depth: number) {
     if (depth > 20) throw new EditError('The type nests its declarations more than 20 levels deep.');
     const space = this.space();
-    for (const { node: d, refType } of declarations.values()) {
+    for (const declaration of declarations.values()) {
+      const { node: d, refType } = declaration;
       const rule = space.modellingRule(d);
       const childPath = path ? `${path}/${d.browseName.name}` : d.browseName.name;
       const include = rule === RULE.Mandatory || (rule === RULE.Optional && (options.optional?.(childPath) ?? false));
@@ -783,10 +820,7 @@ export class ModelEditor {
       if (typeDefinition) c.references.push({ type: REF.HasTypeDefinition, isForward: true, target: typeDefinition.id });
       mapping.set(d.id, c.id);
 
-      // The declaration's own children override those its type declares.
-      const inner = typeDefinition ? this.declarationsOf(typeDefinition.id) : new Map<string, { node: UaNode; refType: string }>();
-      for (const own of space.children(d)) inner.set(qualified(own.node), { node: own.node, refType: own.edge.type });
-      this.fill(c, inner, childPath, options, mapping, depth + 1);
+      this.fill(c, this.childrenOf(declaration), childPath, options, mapping, depth + 1);
     }
   }
 
