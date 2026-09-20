@@ -172,14 +172,31 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
   };
   walk(root, type, 1);
 
-  // Non-hierarchical references between shapes already on the diagram.
+  // Non-hierarchical references between shapes already on the diagram. They
+  // run on rails to the right of every shape, not straight across the
+  // diagram: a state machine has many of them (FromState, ToState, HasCause)
+  // and a line through the boxes hides what it crosses.
+  const sideways: DiagramLine[] = [];
   for (const s of shapes) {
     for (const e of space.out(s.nodeKey)) {
       if (space.isHierarchical(e.type) || e.type === REF.HasTypeDefinition || e.type === REF.HasModellingRule) continue;
       const target = placed.get(e.target);
-      if (target && target !== s) lines.push(line(space, e, s, target));
+      if (target && target !== s) sideways.push(line(space, e, s, target));
     }
   }
+  const edge = Math.max(...shapes.map(s => s.x + s.width));
+  sideways.forEach((l, i) => {
+    const source = shapes.find(s => s.id === l.source)!;
+    const target = shapes.find(s => s.id === l.target)!;
+    const rail = edge + 24 + (i % 5) * 14;
+    l.waypoints = [
+      { x: source.x + source.width, y: source.y + source.height / 2 },
+      { x: rail, y: source.y + source.height / 2 },
+      { x: rail, y: target.y + target.height / 2 },
+      { x: target.x + target.width, y: target.y + target.height / 2 },
+    ];
+  });
+  lines.push(...sideways);
 
   return { root: root.id, shapes, lines, truncated };
 }

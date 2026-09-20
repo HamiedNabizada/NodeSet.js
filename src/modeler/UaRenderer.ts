@@ -198,10 +198,25 @@ function openArrow(parent: SVGElement, from: Point, to: Point) {
 }
 
 function label(parent: SVGElement, at: Point, content: string, italic: boolean, anchor: 'start' | 'end' = 'start') {
+  const x = anchor === 'start' ? at.x + 4 : at.x;
+  const y = at.y - 4;
+  // A line of a reference crosses other nodes on a full diagram. The label
+  // keeps a sheet of its own underneath, so it stays readable over them.
+  const width = content.length * 5.7 + 4;
+  const sheet = svgCreate('rect');
+  svgAttr(sheet, {
+    x: (anchor === 'start' ? x : x - width) - 2,
+    y: y - 9,
+    width,
+    height: 12,
+    fill: '#ffffff',
+    'fill-opacity': 0.85,
+  });
+  svgAppend(parent, sheet);
   const t = svgCreate('text');
   svgAttr(t, {
-    x: anchor === 'start' ? at.x + 4 : at.x,
-    y: at.y - 4,
+    x,
+    y,
     'text-anchor': anchor,
     'font-family': 'Segoe UI, Arial, sans-serif',
     'font-size': 11,
@@ -212,10 +227,18 @@ function label(parent: SVGElement, at: Point, content: string, italic: boolean, 
   svgAppend(parent, t);
 }
 
+/**
+ * Where the name of a reference goes: the middle of its longest straight
+ * piece, which is the part with room for it. On the middle of the whole line
+ * it would land on a corner, or on a node the line passes.
+ */
 function midpoint(pts: Point[]): Point {
-  const a = pts[Math.floor((pts.length - 1) / 2)];
-  const b = pts[Math.floor((pts.length - 1) / 2) + 1] ?? a;
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  let best = { a: pts[0], b: pts[1] ?? pts[0], length: -1 };
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const length = Math.abs(pts[i + 1].x - pts[i].x) + Math.abs(pts[i + 1].y - pts[i].y);
+    if (length > best.length) best = { a: pts[i], b: pts[i + 1], length };
+  }
+  return { x: (best.a.x + best.b.x) / 2, y: (best.a.y + best.b.y) / 2 };
 }
 
 /** Shortens a label to about the width available (no text measuring outside the browser). */
