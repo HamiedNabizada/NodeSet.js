@@ -1,10 +1,26 @@
 {
   "name": "nodeset-js",
   "version": "0.1.0",
-  "private": true,
   "description": "Graphical modeler for OPC UA information models: types and instances in the notation of OPC 10000-3 Annex C, stored as NodeSet2.",
   "license": "MIT",
   "author": "Hamied Nabizada",
+  "homepage": "https://github.com/HamiedNabizada/NodeSet.js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HamiedNabizada/NodeSet.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HamiedNabizada/NodeSet.js/issues"
+  },
+  "keywords": [
+    "opc-ua",
+    "nodeset",
+    "nodeset2",
+    "information-model",
+    "modeler",
+    "caex",
+    "diagram-js"
+  ],
   "type": "commonjs",
   "scripts": {
     "dev": "webpack serve --config webpack.config.js --mode development",
