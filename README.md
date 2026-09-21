@@ -1,10 +1,10 @@
-# NodeSet.js
+﻿# NodeSet.js
 
 A graphical modeler for OPC UA information models. Types and instances are
 drawn in the notation of OPC 10000-3 Annex C and stored as NodeSet2 files,
 with nothing in between: the file it opens and the file it writes are the
 NodeSets every other OPC UA tool reads. It runs in the browser on its own, and
-it embeds: the AutomationML Editor plugin [AMLOpcUa](../AMLOpcUa) hosts it and
+it embeds: the AutomationML Editor plugin [AMLOpcUa](https://github.com/hsu-aut/AMLOpcUa) hosts it and
 connects the models to AutomationML (OPC 10000-83 Annex A, AML-UA-XSLT rules)
 and to VDI 3682 process descriptions.
 
@@ -16,7 +16,7 @@ RequiredModels kept, checks against OPC 10000-3, undo, editing from the
 canvas's context pad, and diagram positions kept in the NodeSet.
 Inside the AutomationML Editor it runs in the Modeler tab of AMLOpcUa, which
 opens a namespace of the document and imports the result back
-([AMLOpcUa docs/modeler.md](../AMLOpcUa/docs/modeler.md)).
+([AMLOpcUa docs/modeler.md](https://github.com/hsu-aut/AMLOpcUa/blob/main/docs/modeler.md)).
 
 Status: in development, see [docs/plan.md](docs/plan.md). Lessons that apply to
 FPB.js are collected in [docs/lessons-for-fpbjs.md](docs/lessons-for-fpbjs.md).
