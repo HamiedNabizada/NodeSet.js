@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:3120/',
     viewport: { width: 1500, height: 950 },
+    // A button that never comes fails the test in seconds, not at its timeout.
+    actionTimeout: 15_000,
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {

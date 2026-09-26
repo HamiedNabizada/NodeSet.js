@@ -7,6 +7,7 @@ import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
+import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
 import { Guard } from './Guard';
 import { Ask, AskDialog } from './AskDialog';
@@ -60,6 +61,12 @@ export function App() {
   // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
   const host = useMemo(() => HostBridge.detect(), []);
   const [dirty, setDirty] = useState(false);
+  // Where the modeler shows that the browser keeps no backup.
+  const report = useRef<(message: string) => void>();
+  const backup = useMemo(() => {
+    const store = host ? undefined : browserStore();
+    return store && new Backup(store, { onFailure: message => report.current?.(message) });
+  }, [host]);
 
   // On its own in a browser, closing or reloading the page asks while changes are unsaved.
   useEffect(() => {
@@ -77,12 +84,21 @@ export function App() {
 
   return (
     <Guard name="modeler" actions={rescue}>
-      <Modeler kept={kept} host={host} onDirty={setDirty} />
+      <Modeler kept={kept} host={host} onDirty={setDirty} backup={backup} report={report} />
     </Guard>
   );
 }
 
-function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: HostBridge | undefined; onDirty: (dirty: boolean) => void }) {
+interface ModelerProps {
+  kept: MutableRefObject<Kept>;
+  host: HostBridge | undefined;
+  onDirty: (dirty: boolean) => void;
+  /** Keeps unsaved work in the browser; none inside a host. */
+  backup?: Backup;
+  report: MutableRefObject<((message: string) => void) | undefined>;
+}
+
+function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
   // Started again after a failure, the modeler goes on with what was open.
   const [workspace, setWorkspace] = useState<Workspace | undefined>(kept.current.workspace);
   const [revision, setRevision] = useState(0);
@@ -103,6 +119,8 @@ function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: 
   selectedRef.current = selected;
   const [dirty, setDirty] = useState(kept.current.dirty);
   const [ask, setAsk] = useState<Ask>();
+  // Unsaved work another page left in the browser.
+  const [offer, setOffer] = useState<Draft>();
   // The canvas outlives renders; it reaches the current edit function through a ref.
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
@@ -144,6 +162,19 @@ function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: 
       await start(ws => ws.open(xml), file.name);
     }
   }, [start, mayDiscard]);
+
+  const restore = useCallback(async (draft: Draft) => {
+    if (!mayDiscard()) return;
+    setOffer(undefined);
+    await start(ws => ws.open(draft.xml), draft.title, draft.required);
+    setDirty(true);
+    await backup?.forget(draft.id);
+  }, [start, mayDiscard, backup]);
+
+  const discard = useCallback((draft: Draft) => {
+    setOffer(undefined);
+    backup?.forget(draft.id);
+  }, [backup]);
 
   const openSample = useCallback(async () => {
     if (!mayDiscard()) return;
@@ -220,6 +251,21 @@ function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: 
     kept.current = { workspace, dirty };
     onDirty(dirty);
   }, [kept, workspace, dirty, onDirty]);
+
+  useEffect(() => {
+    report.current = text => setStatus({ text, warn: true });
+  }, [report]);
+
+  useEffect(() => {
+    backup?.keep(() => (dirty && workspace?.editable
+      ? { title: workspace.editable.models[0]?.modelUri ?? 'Model', xml: workspace.snapshot(), required: workspace.addedFiles }
+      : undefined));
+  }, [backup, workspace, dirty, revision]);
+
+  useEffect(() => {
+    if (!backup || kept.current.workspace) return;
+    backup.offered().then(drafts => setOffer(drafts[0]), () => undefined);
+  }, [backup, kept]);
   useEffect(() => { host?.post({ type: 'status', text: status.text, warn: status.warn }); }, [host, status]);
 
   const save = useCallback(() => {
@@ -400,6 +446,13 @@ function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: 
           <input type="checkbox" checked={showExternal} onChange={e => setShowExternal(e.target.checked)} /> Types of required models
         </label>
       </div>
+      {offer && (
+        <div className="offer" role="status">
+          <span>An unsaved model from {new Date(offer.savedAt).toLocaleString()} is kept in this browser: <span className="mono">{offer.title}</span></span>
+          <button onClick={() => restore(offer)}>Restore</button>
+          <button onClick={() => discard(offer)}>Discard</button>
+        </div>
+      )}
       <div className="main">
         <div className="side">
           <input className="filter" placeholder="Filter types" value={filter} onChange={e => setFilter(e.target.value)} />

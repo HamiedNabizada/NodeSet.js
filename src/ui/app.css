@@ -193,3 +193,7 @@ fieldset.add .row.wrap select, fieldset.add .row.wrap input { min-width: 92px; f
 /* A part that failed while it was drawn (Guard). */
 .guard { margin: 10px; padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 6px; color: var(--danger); background: var(--bg); }
 .guard .row { margin-top: 8px; display: flex; gap: 8px; }
+
+/* Unsaved work another page left in the browser (backup.ts). */
+.offer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; border-bottom: 1px solid var(--warn-line); color: var(--ink); background: var(--panel); }
+.offer > span { margin-right: auto; }

@@ -25,6 +25,8 @@ export class Workspace {
   /** Required models, in load order. */
   private readonly dependencies: NodeSetFile[] = [];
   private readonly loaded = new Set<string>();
+  /** The NodeSet files added with addRequired, as they were given. */
+  private readonly added: string[] = [];
   /** The required models, indexed once; the editable model sits on top. */
   private base?: AddressSpace;
 
@@ -45,6 +47,7 @@ export class Workspace {
   private async start(file: NodeSetFile): Promise<OpenResult> {
     this.dependencies.length = 0;
     this.loaded.clear();
+    this.added.length = 0;
     this.base = undefined;
     const missing = await this.require(file, new Set());
     this.layout = readLayout(file);
@@ -59,8 +62,14 @@ export class Workspace {
     if (file.models.length > 0 && file.models.every(m => this.loaded.has(m.modelUri))) return [];
     const missing = await this.require(file, new Set());
     this.add(file);
+    this.added.push(xml);
     if (this.editable) this.rebuild(this.editable);
     return missing;
+  }
+
+  /** The NodeSet files added besides the bundled ones, to open a draft of the model again. */
+  get addedFiles(): string[] {
+    return [...this.added];
   }
 
   /** Adds a model the modeler ships (DI), with what it requires. */
@@ -82,8 +91,7 @@ export class Workspace {
    * not declare yet, with the version and date of the loaded model. Without
    * it, a NodeSet importer does not know it has to load that model.
    */
-  syncRequiredModels(): string[] {
-    const file = this.editable;
+  syncRequiredModels(file: NodeSetFile | undefined = this.editable): string[] {
     const own = file?.models[0];
     if (!file || !own) return [];
     const used = new Set<string>([UA_NAMESPACE]);
@@ -165,5 +173,14 @@ export class Workspace {
     writeLayout(this.editable, this.layout);
     this.syncRequiredModels();
     return writeNodeSet(this.editable);
+  }
+
+  /** The model as a NodeSet, as save writes it, but written from a copy: the model stays as it is. */
+  snapshot(): string {
+    if (!this.editable) throw new Error('Nothing is open.');
+    const copy = structuredClone(this.editable);
+    writeLayout(copy, this.layout);
+    this.syncRequiredModels(copy);
+    return writeNodeSet(copy);
   }
 }
