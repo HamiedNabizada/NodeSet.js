@@ -109,6 +109,14 @@ Added after M6, from a review of what was missing:
   builds a model in Node after every library build, so the entry cannot quietly
   grow a dependency on a window.
 
+- Robustness (0.1.1), after a drive over released companion specifications
+  blanked the page on a DataType without fields: every part of the interface
+  sits in an error boundary (`Guard.tsx`) and the open model outside the React
+  tree, so a failure can still be saved from; unsaved work is kept in the
+  browser on a page of its own (`backup.ts`); `eslint-plugin-react-hooks`
+  checks the order of hooks; end-to-end tests in Chromium (`tests/e2e`) drive
+  the web build, among them twelve companion specifications in CI.
+
 Not done: structure fields that allow subtypes (their values name their own
 type), matrices, a test inside the AutomationML Editor itself.
 

@@ -26,7 +26,18 @@ npm install
 npm run dev        # http://localhost:3002
 npm test
 npm run typecheck
+npm run lint       # the order of React hooks
+npm run test:e2e   # the web build in Chromium (npx playwright install chromium once)
 ```
+
+`npm run test:e2e` also opens twelve released companion specifications when
+`UA_NODESET` names a clone of
+[OPCFoundation/UA-Nodeset](https://github.com/OPCFoundation/UA-Nodeset) with
+the folders in `tests/e2e/corpus-folders.txt`; CI checks them out at the
+commit named in `.github/workflows/ci.yml`.
+
+On a page of its own the modeler keeps unsaved work in the browser
+(IndexedDB) and offers it at the next start; embedded in a host it does not.
 
 ## Third-party content
 

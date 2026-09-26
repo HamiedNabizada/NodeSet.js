@@ -153,6 +153,37 @@ export.
 *FPB.js:* a small view of a process's layers, or of the flow between
 operators, could sit in the panel the same way.
 
+**A hook after an early return blanks the whole page.** The fields section
+returned `null` for a DataType without fields and called a hook after that
+return. Selecting a structure and then a plain Int32 subtype made React render
+fewer hooks than before; without an error boundary React unmounts the whole
+root, so the page went white and unsaved work was gone. It showed on 2 of 60
+types of MachineVision, never in the unit tests. Hooks go before every return,
+and `eslint-plugin-react-hooks` with only `rules-of-hooks` finds the mistake
+at build time.
+*FPB.js:* the React panels that vanish after a layer switch
+(`panel-disappear-bug`) look like the same class of failure; a render error in
+a panel without a boundary unmounts the panel tree. Worth checking the
+console at the moment they vanish, and the hooks of the panels for an early
+return.
+
+**A boundary per part, and the model outside the tree.** The node editor and
+the list of findings each sit in an error boundary that says what went wrong
+and offers "Try again"; the next selection shows the part again. Around the
+whole modeler a last boundary keeps the open model in a ref outside the
+React tree, so after a failure it can still be saved, and "Try again" starts
+the modeler anew with the same model.
+*FPB.js:* the modeler's state lives in diagram-js, outside React, which is
+the right place; the panels only need boundaries of their own.
+
+**Unsaved work in the browser, offered, never loaded by itself.** After a
+pause in editing the model goes to IndexedDB (a localStorage limit of about
+5 MB is too small for a large companion specification), with the NodeSets it
+required that the modeler does not ship. The next start offers it with
+Restore and Discard. Inside a host there is no backup; the host keeps the
+model. This is the pattern of FPB.js's `autosave/`, in less: one draft per
+page and no presence tracking of tabs.
+
 ## Embedding in the AutomationML Editor
 
 **Test the host bridge without the host.** A Playwright init script puts a
@@ -344,3 +375,14 @@ the same through a five-line plugin that turns `.xml` into a string module.
 **Screenshots as a check.** A small Playwright script serves `dist/web`,
 clicks through the app and takes a screenshot; looking at it caught
 unreadable zoom and crowded labels that no unit test would.
+
+**Click through real models in CI.** 98 unit tests covered the NodeSet core
+and none the interface. A script that opens released companion
+specifications and selects every type once found the crash above within
+minutes. It now runs in CI over twelve specifications, from a sparse checkout
+of OPCFoundation/UA-Nodeset at a fixed commit (19 MB), in under a minute: each
+is opened with what it requires, every type shown, one edit undone, saved, and
+any error the page logs fails the test.
+*FPB.js:* the same drive over the example processes (open, switch every
+layer, select every element, save) would find panel failures that unit tests
+do not reach.

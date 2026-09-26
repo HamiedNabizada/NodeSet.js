@@ -6,49 +6,44 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
-### Added
-
-- A second entry, `nodeset-js/core`: the NodeSet layer without the canvas and
-  without React, so a script can build and check a NodeSet in Node. The base
-  model and DI are inside that build. `npm run verify:core` keeps it honest.
-- Two rules on an instance against its type, which nothing checked before:
-  M022 finds a Mandatory child the instance does not have, M023 a
-  MandatoryPlaceholder nothing fills. Over the 24 released companion
-  specifications they fire twice, both times on an example model that is
-  indeed missing a Mandatory child.
+## [0.1.1] - 2026-09-26
 
 ### Fixed
 
-- The state chart draws the way there and the way back apart: on one line the
-  two arrows and their names covered each other.
-- A declaration that overrides another keeps what the overridden one holds at
-  every depth, not only one level below the type: a child of a child used to
-  replace the one it overrides with everything below it.
-- A value of a structure carries the fields it inherits, not only the ones its
-  own type adds: a NodeSet declares only the latter, and a server refuses a
-  value that leaves the inherited ones out.
-- A boolean written as `1` or `0`, which XML allows, was read as the opposite:
-  an abstract type became instantiable, an optional structure field mandatory,
-  and `IsForward="0"` turned a reference around. Found by an audit over the
-  published companion specifications, where nothing spells it that way yet.
-- A description is written back with the whitespace it had, a required model
-  keeps the attributes it carries (`XmlSchemaUri`, `ModelVersion`), an empty
-  argument description keeps its locale, a file that starts with a byte order
-  mark opens at all (one released companion specification does), and `Value`
-  is written before the elements the modeler does not know, which the schema
-  demands. All 37 NodeSets on hand now read and write back with no difference
-  at all.
-- Rules that fired on released models: M012 reported every node of the base
-  model as foreign (5476 errors), M002 counted names without their namespace,
-  M011 asked a structure for the fields it inherits, M010 insisted on a
-  "Default Binary" encoding where the specification allows "Default XML", and
-  M015 asked a placeholder method to be named in angle brackets, which is for
-  objects and variables.
-- References that are not the ones holding a child now run on rails beside the
-  shapes instead of crossing them, and their names sit on the longest straight
-  piece of the line, on a sheet of their own.
+- Selecting a DataType without fields (a subtype of Int32, say) after one with
+  fields (a structure or an enumeration) blanked the whole page, and whatever
+  was not saved was gone: the fields section called a hook after an early
+  return. It showed on MachineVision, whose ResultStateDataType refines Int32.
 
-## [0.1.0] - 2026-09-20
+### Added
+
+- A part of the modeler that fails while it is drawn says so in its place
+  instead of taking the page with it. If the modeler as a whole fails, the
+  model stays: the message offers Save NodeSet, and Try again starts the
+  modeler anew with the same model. An edit whose drawing failed still counts
+  as unsaved, and what a host sends meanwhile is kept for the modeler.
+- On a page of its own the modeler keeps unsaved work in the browser
+  (IndexedDB) once editing pauses, with the NodeSets loaded from files, and the
+  next start offers it with Restore and Discard. A draft goes as soon as the
+  model is saved, and a page never offers the draft of another page that is
+  still open. Inside a host such as AMLOpcUa there is no backup; the host keeps
+  the model.
+- Tests that drive the web build in Chromium (`npm run test:e2e`): modelling a
+  type with a state machine, every kind of DataType in turn, a failure of the
+  modeler, the backup, the modeler inside a host, and twelve released
+  companion specifications from OPCFoundation/UA-Nodeset, each opened with
+  what it requires, every type shown, one edit undone and saved. CI runs them
+  on a sparse checkout at a fixed commit.
+- `npm run lint`: `eslint-plugin-react-hooks` with its rule on the order of
+  hooks, the one that would have caught the fault above. It runs in CI.
+
+### Known limits
+
+- The checks run in the modeler itself, not inside the boundary of the list
+  of findings, so a check that throws still stops the whole modeler (the
+  model stays, as above). None is known to throw.
+
+## [0.1.0] - 2026-09-21
 
 The first release: a graphical modeler for OPC UA information models that
 reads and writes NodeSet2 files, runs in the browser on its own and embeds in
@@ -82,6 +77,48 @@ the AutomationML Editor plugin
 - **Variables from a signal list** (CSV), as one step that undo takes back.
 - **Embedding**: a library build (`nodeset-js`) with type declarations, and a
   host protocol over WebView2 messages for the AMLOpcUa plugin.
+- A second entry, `nodeset-js/core`: the NodeSet layer without the canvas and
+  without React, so a script can build and check a NodeSet in Node. The base
+  model and DI are inside that build. `npm run verify:core` keeps it honest.
+- Two rules on an instance against its type, which nothing checked before:
+  M022 finds a Mandatory child the instance does not have, M023 a
+  MandatoryPlaceholder nothing fills. Over the 24 released companion
+  specifications they fire twice, both times on an example model that is
+  indeed missing a Mandatory child.
+
+### Fixed
+
+Found after these notes were first written on 20 September and fixed before
+the tag:
+
+- The state chart draws the way there and the way back apart: on one line the
+  two arrows and their names covered each other.
+- A declaration that overrides another keeps what the overridden one holds at
+  every depth, not only one level below the type: a child of a child used to
+  replace the one it overrides with everything below it.
+- A value of a structure carries the fields it inherits, not only the ones its
+  own type adds: a NodeSet declares only the latter, and a server refuses a
+  value that leaves the inherited ones out.
+- A boolean written as `1` or `0`, which XML allows, was read as the opposite:
+  an abstract type became instantiable, an optional structure field mandatory,
+  and `IsForward="0"` turned a reference around. Found by an audit over the
+  published companion specifications, where nothing spells it that way yet.
+- A description is written back with the whitespace it had, a required model
+  keeps the attributes it carries (`XmlSchemaUri`, `ModelVersion`), an empty
+  argument description keeps its locale, a file that starts with a byte order
+  mark opens at all (one released companion specification does), and `Value`
+  is written before the elements the modeler does not know, which the schema
+  demands. All 37 NodeSets on hand now read and write back with no difference
+  at all.
+- Rules that fired on released models: M012 reported every node of the base
+  model as foreign (5476 errors), M002 counted names without their namespace,
+  M011 asked a structure for the fields it inherits, M010 insisted on a
+  "Default Binary" encoding where the specification allows "Default XML", and
+  M015 asked a placeholder method to be named in angle brackets, which is for
+  objects and variables.
+- References that are not the ones holding a child now run on rails beside the
+  shapes instead of crossing them, and their names sit on the longest straight
+  piece of the line, on a sheet of their own.
 
 ### Known limits
 
