@@ -27,6 +27,9 @@ jobs:
       - name: Types
         run: npm run typecheck
 
+      - name: Hooks
+        run: npm run lint
+
       - name: Test
         run: npm test
 
@@ -43,3 +46,42 @@ jobs:
         with:
           name: nodeset-js-dist
           path: dist
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      # OPCFoundation/UA-Nodeset at a fixed commit, so the corpus changes only here.
+      UA_NODESET_COMMIT: 4b79bcfaaa44929d8b50158d25b2f57d86aed5e8
+      UA_NODESET: ${{ github.workspace }}/../UA-Nodeset
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Browser
+        run: npx playwright install --with-deps chromium
+
+      # Only the folders the corpus test opens, with what their models require.
+      - name: Companion specifications
+        run: |
+          git init -q "$UA_NODESET"
+          cd "$UA_NODESET"
+          git remote add origin https://github.com/OPCFoundation/UA-Nodeset.git
+          git sparse-checkout set $(cat "$GITHUB_WORKSPACE/tests/e2e/corpus-folders.txt")
+          git fetch -q --depth 1 --filter=blob:none origin "$UA_NODESET_COMMIT"
+          git checkout -q FETCH_HEAD
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-results
+          path: test-results

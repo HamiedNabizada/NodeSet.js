@@ -1,0 +1,15 @@
+AMB
+CommercialKitchenEquipment
+IA
+ISA95-JOBCONTROL
+LADS
+MachineTool
+MachineVision
+Machinery
+PADIM
+PackML
+PlasticsRubber/GeneralTypes/1.03
+Pumps
+Robotics
+Scales
+Woodworking
