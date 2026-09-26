@@ -18,8 +18,7 @@ Inside the AutomationML Editor it runs in the Modeler tab of AMLOpcUa, which
 opens a namespace of the document and imports the result back
 ([AMLOpcUa docs/modeler.md](https://github.com/hsu-aut/AMLOpcUa/blob/main/docs/modeler.md)).
 
-Status: in development, see [docs/plan.md](docs/plan.md). Lessons that apply to
-FPB.js are collected in [docs/lessons-for-fpbjs.md](docs/lessons-for-fpbjs.md).
+Status: in development, see [docs/plan.md](docs/plan.md).
 
 ```bash
 npm install

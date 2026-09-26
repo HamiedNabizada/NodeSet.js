@@ -4,8 +4,9 @@
 // the inverse HasSubtype to its supertype. New nodes get the next free
 // numeric NodeId of the model's namespace.
 //
-// Undo and redo work on snapshots of the file, which is simple and cheap at
-// the size of information models.
+// Undo and redo work on snapshots of the file. That is simple, and a copy
+// takes 25 ms for a model like MachineVision, but 200 ms and 23 MB for one
+// like Pumps; undoLimit keeps the number of steps in proportion.
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
