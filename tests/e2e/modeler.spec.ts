@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { answer, openNodeSet, selectEach, typeList, watchErrors } from './modeler';
+import { answer, breakSorting, mendSorting, openNodeSet, selectEach, typeList, watchErrors } from './modeler';
 
 // A small model with every kind of DataType: structure, enumeration, OptionSet and a plain Int32.
 const fixture = join(__dirname, 'fixtures', 'Robustness.NodeSet2.xml');
@@ -50,12 +50,7 @@ test('keeps the model through a failure of the modeler, to save it and to go on 
   await page.locator('button[title="New ObjectType"]').click();
   await answer(page, 'ValveType');
 
-  // A failure the modeler has no part in: sorting the list of types throws.
-  await page.evaluate(() => {
-    const original = String.prototype.localeCompare;
-    (window as unknown as { restore: () => void }).restore = () => { String.prototype.localeCompare = original; };
-    String.prototype.localeCompare = () => { throw new Error('injected failure'); };
-  });
+  await breakSorting(page);
   await page.locator('.filter').fill('Type');
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('The modeler stopped: injected failure');
@@ -63,8 +58,21 @@ test('keeps the model through a failure of the modeler, to save it and to go on 
   const [download] = await Promise.all([page.waitForEvent('download'), alert.getByRole('button', { name: 'Save NodeSet' }).click()]);
   expect(await readFile(await download.path(), 'utf8')).toContain(':ValveType"');
 
-  await page.evaluate(() => (window as unknown as { restore: () => void }).restore());
+  await mendSorting(page);
   await alert.getByRole('button', { name: 'Try again' }).click();
   await expect(page.locator('.status')).toContainText('started again');
   await expect(typeList(page).filter({ hasText: 'ValveType' })).toHaveCount(1);
+});
+
+test('counts an edit that made the modeler fail as unsaved', async ({ page }) => {
+  await openNodeSet(page, fixture);
+  await breakSorting(page);
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'CrashType');
+  await expect(page.getByRole('alert')).toContainText('The modeler stopped');
+
+  await mendSorting(page);
+  await page.getByRole('alert').getByRole('button', { name: 'Try again' }).click();
+  await expect(typeList(page).filter({ hasText: 'CrashType' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
 });

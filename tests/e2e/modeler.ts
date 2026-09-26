@@ -53,3 +53,35 @@ export async function selectEach(page: Page): Promise<{ count: number; emptied: 
   }
   return { count, emptied };
 }
+
+/** A failure the modeler has no part in: sorting the list of types throws, until mended. */
+export async function breakSorting(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const original = String.prototype.localeCompare;
+    (window as unknown as { mend: () => void }).mend = () => { String.prototype.localeCompare = original; };
+    String.prototype.localeCompare = () => { throw new Error('injected failure'); };
+  });
+}
+
+export const mendSorting = (page: Page) => page.evaluate(() => (window as unknown as { mend: () => void }).mend());
+
+/** A draft as the backup keeps it in IndexedDB. */
+export interface StoredDraft { id: string; savedAt: number; title: string; xml: string; required: string[] }
+
+/** Runs on the drafts the page's browser keeps: lists them, or puts one there. */
+export function drafts(page: Page, put?: StoredDraft): Promise<StoredDraft[]> {
+  return page.evaluate(draft => new Promise<StoredDraft[]>((resolve, reject) => {
+    const request = indexedDB.open('nodeset-js', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('drafts', { keyPath: 'id' });
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const transaction = db.transaction('drafts', 'readwrite');
+      const store = transaction.objectStore('drafts');
+      if (draft) store.put(draft);
+      const all = store.getAll();
+      transaction.oncomplete = () => { db.close(); resolve(all.result as StoredDraft[]); };
+      transaction.onerror = () => reject(transaction.error);
+    };
+  }), put);
+}

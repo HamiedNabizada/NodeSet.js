@@ -23,12 +23,27 @@ const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'Re
 
 type Status = { text: string; warn?: boolean };
 
+/** Told to the host in "ready". */
+const VERSION = '0.1.1';
+
 const OBJECTS = uaKey(85);
 
 /** What is open, kept outside the modeler so that a failure of the modeler does not take it along. */
 interface Kept {
   workspace?: Workspace;
   dirty: boolean;
+}
+
+/** What the modeler receives from outside while it lives; kept for it while it has failed. */
+interface Inbox {
+  /** The modeler's handler of host messages, while it is there. */
+  host?: (message: HostToModeler) => void;
+  /** An "open" or "new" of the host that came while the modeler had failed. */
+  pending?: HostToModeler;
+  /** The modeler's status line, while it is there. */
+  report?: (message: string) => void;
+  /** A failure of the backup that came while the modeler had failed. */
+  missed?: string;
 }
 
 /** The file name a model is saved under. */
@@ -61,12 +76,41 @@ export function App() {
   // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
   const host = useMemo(() => HostBridge.detect(), []);
   const [dirty, setDirty] = useState(false);
-  // Where the modeler shows that the browser keeps no backup.
-  const report = useRef<(message: string) => void>();
+  const inbox = useRef<Inbox>({});
   const backup = useMemo(() => {
     const store = host ? undefined : browserStore();
-    return store && new Backup(store, { onFailure: message => report.current?.(message) });
+    return store && new Backup(store, {
+      onFailure: message => { if (inbox.current.report) inbox.current.report(message); else inbox.current.missed = message; },
+    });
   }, [host]);
+
+  // The host is heard here, not in the modeler, so nothing it sends is lost
+  // while the modeler shows a failure. "ready" follows the modeler's own
+  // listening: a child's effects run before its parent's.
+  useEffect(() => {
+    if (!host) return;
+    const stop = host.listen(message => {
+      if (message.type === 'theme') applyTheme(message.dark);
+      else if (inbox.current.host) inbox.current.host(message);
+      else if (message.type === 'open' || message.type === 'new') inbox.current.pending = message;
+      else if (message.ok) {
+        kept.current = { ...kept.current, dirty: false };
+        setDirty(false);
+      }
+    });
+    host.post({ type: 'ready', version: VERSION });
+    return stop;
+  }, [host]);
+
+  useEffect(() => { host?.post({ type: 'dirty', dirty }); }, [host, dirty]);
+
+  // A draft still waiting is written when the page goes away, as far as the browser lets it.
+  useEffect(() => {
+    if (!backup) return;
+    const onHide = () => { backup.flush(); };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, [backup]);
 
   // On its own in a browser, closing or reloading the page asks while changes are unsaved.
   useEffect(() => {
@@ -84,7 +128,7 @@ export function App() {
 
   return (
     <Guard name="modeler" actions={rescue}>
-      <Modeler kept={kept} host={host} onDirty={setDirty} backup={backup} report={report} />
+      <Modeler kept={kept} host={host} onDirty={setDirty} backup={backup} inbox={inbox} />
     </Guard>
   );
 }
@@ -95,10 +139,10 @@ interface ModelerProps {
   onDirty: (dirty: boolean) => void;
   /** Keeps unsaved work in the browser; none inside a host. */
   backup?: Backup;
-  report: MutableRefObject<((message: string) => void) | undefined>;
+  inbox: MutableRefObject<Inbox>;
 }
 
-function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
+function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   // Started again after a failure, the modeler goes on with what was open.
   const [workspace, setWorkspace] = useState<Workspace | undefined>(kept.current.workspace);
   const [revision, setRevision] = useState(0);
@@ -125,8 +169,15 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
   const bump = useCallback(() => setRevision(r => r + 1), []);
-  const changed = useCallback(() => { setRevision(r => r + 1); setDirty(true); }, []);
+  const changed = useCallback(() => {
+    setRevision(r => r + 1);
+    setDirty(true);
+    // At once, not after the next render: that render may be the one that fails.
+    kept.current = { ...kept.current, dirty: true };
+    onDirty(true);
+  }, [kept, onDirty]);
 
+  /** Opens or starts a model; false when that failed, which the status line then says. */
   const start = useCallback(async (action: (ws: Workspace) => Promise<unknown>, name: string, required: string[] = []) => {
     setStatus({ text: `Reading ${name} …` });
     try {
@@ -134,6 +185,7 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
       await action(ws);
       for (const xml of required) await ws.addRequired(xml);
       const missing = ws.missing;
+      kept.current = { workspace: ws, dirty: false };
       setWorkspace(ws);
       setDirty(false);
       setShown(undefined);
@@ -144,10 +196,12 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
       setStatus(missing.length > 0
         ? { text: `${name}: missing required models: ${missing.join(', ')}.`, warn: true }
         : { text: `${name}: ${file.nodes.length} nodes of ${file.models.map(m => m.modelUri).join(', ')}.` });
+      return true;
     } catch (e) {
       setStatus({ text: `${name}: ${(e as Error).message}`, warn: true });
+      return false;
     }
-  }, [bump]);
+  }, [bump, kept]);
 
   /** True when nothing unsaved would be lost, or the user agrees to lose it. */
   const mayDiscard = useCallback(
@@ -163,12 +217,16 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
     }
   }, [start, mayDiscard]);
 
+  // A draft that does not open stays, and stays offered; the status line says why.
   const restore = useCallback(async (draft: Draft) => {
     if (!mayDiscard()) return;
     setOffer(undefined);
-    await start(ws => ws.open(draft.xml), draft.title, draft.required);
+    if (!await start(ws => ws.open(draft.xml), draft.title, draft.required)) {
+      setOffer(draft);
+      return;
+    }
     setDirty(true);
-    await backup?.forget(draft.id);
+    await backup?.adopt(draft);
   }, [start, mayDiscard, backup]);
 
   const discard = useCallback((draft: Draft) => {
@@ -229,23 +287,25 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
     setStatus({ text: 'Applying to the document …' });
   }, [host, workspace]);
 
-  // Messages from the host, and "ready" once the modeler listens.
+  // Messages from the host, through App; one that came while the modeler had failed comes first.
   useEffect(() => {
     if (!host) return;
-    const stop = host.listen((m: HostToModeler) => {
+    const handle = (m: HostToModeler) => {
       if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
       if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
-      if (m.type === 'theme') applyTheme(m.dark);
       if (m.type === 'applied' || m.type === 'saved') {
         if (m.ok) setDirty(false);
         setStatus({ text: m.text, warn: !m.ok });
       }
-    });
-    host.post({ type: 'ready', version: '0.1.0' });
-    return stop;
-  }, [host, start]);
-
-  useEffect(() => { host?.post({ type: 'dirty', dirty }); }, [host, dirty]);
+    };
+    const box = inbox.current;
+    box.host = handle;
+    if (box.pending) {
+      handle(box.pending);
+      box.pending = undefined;
+    }
+    return () => { box.host = undefined; };
+  }, [host, start, inbox]);
 
   useEffect(() => {
     kept.current = { workspace, dirty };
@@ -253,13 +313,23 @@ function Modeler({ kept, host, onDirty, backup, report }: ModelerProps) {
   }, [kept, workspace, dirty, onDirty]);
 
   useEffect(() => {
-    report.current = text => setStatus({ text, warn: true });
-  }, [report]);
+    const box = inbox.current;
+    box.report = text => setStatus({ text, warn: true });
+    if (box.missed) {
+      box.report(box.missed);
+      box.missed = undefined;
+    }
+    return () => { box.report = undefined; };
+  }, [inbox]);
 
+  // Unsaved, the model is kept once editing pauses; saved, its draft goes at once.
   useEffect(() => {
-    backup?.keep(() => (dirty && workspace?.editable
-      ? { title: workspace.editable.models[0]?.modelUri ?? 'Model', xml: workspace.snapshot(), required: workspace.addedFiles }
-      : undefined));
+    if (!backup) return;
+    if (dirty && workspace?.editable) {
+      backup.keep(() => ({ title: workspace.editable!.models[0]?.modelUri ?? 'Model', xml: workspace.snapshot(), required: workspace.addedFiles }));
+    } else {
+      backup.clear();
+    }
   }, [backup, workspace, dirty, revision]);
 
   useEffect(() => {
