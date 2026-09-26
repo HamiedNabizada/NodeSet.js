@@ -9,6 +9,7 @@ import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
+import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
@@ -422,9 +423,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
 
   useEffect(() => { modelerRef.current?.select(selected); }, [selected]);
 
-  const findings = useMemo<Finding[]>(
-    () => (workspace?.editable ? check(workspace.space, workspace.editable) : []),
+  const checked = useMemo<Checked>(
+    () => (workspace?.editable ? runChecks(() => check(workspace.space, workspace.editable!)) : { findings: [] }),
     [workspace, revision]);
+  const { findings } = checked;
 
   const types = useMemo(() => {
     if (!workspace) return [];
@@ -509,8 +511,8 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>Reset layout</button>}
         <button disabled={!workspace?.editable} onClick={() => select(undefined)} title="Version, date and the models in use">Model</button>
         <span className="sep" />
-        <button className={errors > 0 ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
-          Checks: {errors} error(s), {findings.length - errors} warning(s)
+        <button className={errors > 0 || checked.error ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
+          {checked.error ? 'Checks failed' : `Checks: ${errors} error(s), ${findings.length - errors} warning(s)`}
         </button>
         <label style={{ marginLeft: 'auto', fontSize: 13 }}>
           <input type="checkbox" checked={showExternal} onChange={e => setShowExternal(e.target.checked)} /> Types of required models
@@ -580,7 +582,8 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       {showFindings && (
         <Guard name="list of findings" resetKey={revision}>
           <div className="findings">
-            {findings.length === 0 && <div className="empty">No findings.</div>}
+            {checked.error && <div className="finding error" role="alert">{checked.error}</div>}
+            {!checked.error && findings.length === 0 && <div className="empty">No findings.</div>}
             {findings.map((f, i) => (
               <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
                 onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>

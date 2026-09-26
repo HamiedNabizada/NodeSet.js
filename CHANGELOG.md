@@ -6,6 +6,16 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Fixed
+
+- Undo kept a copy of the whole file for every step, without end: about
+  23 MB a step for Pumps, so a long session on a large model grew until the
+  tab gave up. A model now keeps at most 100 steps and about 200 000 copied
+  nodes, never fewer than 10 steps (20 for Pumps). A batch is still taken back
+  whole.
+- A check that throws no longer stops the whole modeler: the toolbar says
+  "Checks failed" and the list of findings says why.
+
 ## [0.1.1] - 2026-09-26
 
 ### Fixed

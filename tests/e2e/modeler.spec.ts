@@ -29,6 +29,8 @@ test('models a type with a state machine and saves it as a NodeSet', async ({ pa
   await page.getByRole('button', { name: 'Add transition' }).click();
   await expect(page.locator('ul.machine')).toContainText('IdleToRunning');
   await expect(page.locator('.chart svg')).toHaveCount(1);
+  await page.getByRole('button', { name: /^Checks: \d+ error\(s\)/ }).click();
+  await expect(page.locator('.findings')).toBeVisible();
 
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Save NodeSet/ }).click()]);
   const xml = await readFile(await download.path(), 'utf8');
