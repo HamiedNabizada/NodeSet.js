@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeSetModeler } from '../modeler/Modeler';
 import { REF, RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
@@ -8,6 +8,7 @@ import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { mayLeaveDrafts } from './drafts';
+import { Guard } from './Guard';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
@@ -23,10 +24,71 @@ type Status = { text: string; warn?: boolean };
 
 const OBJECTS = uaKey(85);
 
+/** What is open, kept outside the modeler so that a failure of the modeler does not take it along. */
+interface Kept {
+  workspace?: Workspace;
+  dirty: boolean;
+}
+
+/** The file name a model is saved under. */
+function fileName(workspace: Workspace): string {
+  const model = workspace.editable?.models[0]?.modelUri ?? 'Model';
+  return `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
+}
+
+/** Saves the model: through the host's save dialog when there is a host, else as a download. */
+function saveModel(workspace: Workspace, host: HostBridge | undefined): string {
+  const name = fileName(workspace);
+  if (host) {
+    host.post({ type: 'save', xml: workspace.save(), name });
+    return name;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([workspace.save()], { type: 'application/xml' }));
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  return name;
+}
+
+/**
+ * The complete modeler. If it fails while drawing, the model stays: the
+ * message offers to save it and to start the modeler again with it.
+ */
 export function App() {
-  const [workspace, setWorkspace] = useState<Workspace>();
+  const kept = useRef<Kept>({ dirty: false });
+  // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
+  const host = useMemo(() => HostBridge.detect(), []);
+  const [dirty, setDirty] = useState(false);
+
+  // On its own in a browser, closing or reloading the page asks while changes are unsaved.
+  useEffect(() => {
+    if (host || !dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [host, dirty]);
+
+  const rescue = () => {
+    const workspace = kept.current.workspace;
+    if (!workspace?.editable) return null;
+    return <button onClick={() => saveModel(workspace, host)}>Save NodeSet</button>;
+  };
+
+  return (
+    <Guard name="modeler" actions={rescue}>
+      <Modeler kept={kept} host={host} onDirty={setDirty} />
+    </Guard>
+  );
+}
+
+function Modeler({ kept, host, onDirty }: { kept: MutableRefObject<Kept>; host: HostBridge | undefined; onDirty: (dirty: boolean) => void }) {
+  // Started again after a failure, the modeler goes on with what was open.
+  const [workspace, setWorkspace] = useState<Workspace | undefined>(kept.current.workspace);
   const [revision, setRevision] = useState(0);
-  const [status, setStatus] = useState<Status>({ text: 'Start a new model, open a NodeSet2 file, or open the DI sample.' });
+  const [status, setStatus] = useState<Status>(kept.current.workspace
+    ? { text: 'The modeler was started again after an error; the model is as it was.', warn: true }
+    : { text: 'Start a new model, open a NodeSet2 file, or open the DI sample.' });
   const [filter, setFilter] = useState('');
   const [shown, setShown] = useState<string>();
   const [selected, setSelected] = useState<string>();
@@ -39,13 +101,11 @@ export function App() {
   // The redraw reads the selection without redrawing when only the selection changes.
   const selectedRef = useRef<string>();
   selectedRef.current = selected;
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(kept.current.dirty);
   const [ask, setAsk] = useState<Ask>();
   // The canvas outlives renders; it reaches the current edit function through a ref.
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
-  // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
-  const host = useMemo(() => HostBridge.detect(), []);
   const bump = useCallback(() => setRevision(r => r + 1), []);
   const changed = useCallback(() => { setRevision(r => r + 1); setDirty(true); }, []);
 
@@ -156,32 +216,19 @@ export function App() {
 
   useEffect(() => { host?.post({ type: 'dirty', dirty }); }, [host, dirty]);
 
-  // On its own in a browser, closing or reloading the page asks while changes are unsaved.
   useEffect(() => {
-    if (host || !dirty) return;
-    const onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', onUnload);
-    return () => window.removeEventListener('beforeunload', onUnload);
-  }, [host, dirty]);
+    kept.current = { workspace, dirty };
+    onDirty(dirty);
+  }, [kept, workspace, dirty, onDirty]);
   useEffect(() => { host?.post({ type: 'status', text: status.text, warn: status.warn }); }, [host, status]);
 
   const save = useCallback(() => {
     if (!workspace?.editable || !mayLeaveDrafts()) return;
-    const model = workspace.editable.models[0]?.modelUri ?? 'Model';
-    const name = `${model.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '.').replace(/\.+$/, '')}.NodeSet2.xml`;
-    // Inside a desktop host a save dialog of the host, not a browser download.
-    if (host) {
-      host.post({ type: 'save', xml: workspace.save(), name });
-      return;
-    }
-    const blob = new Blob([workspace.save()], { type: 'application/xml' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    // Inside a desktop host a save dialog of the host, which answers "saved".
+    const name = saveModel(workspace, host);
+    if (host) return;
     setDirty(false);
-    setStatus({ text: `Saved ${a.download}.` });
+    setStatus({ text: `Saved ${name}.` });
   }, [workspace, host]);
 
   // Undo and redo from the keyboard, except while typing.
@@ -396,25 +443,29 @@ export function App() {
           {workspace && !shown && <div className="hint">Pick a type on the left, or add one with +.</div>}
         </div>
         <div className="side right">
-          {workspace && editor && selected && workspace.space.get(selected)
-            ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
-                onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
-                onInstance={key => select(key, key)} />
-            : workspace?.editable
-              ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
-              : <div className="empty">Select a node.</div>}
+          <Guard name="node editor" resetKey={selected}>
+            {workspace && editor && selected && workspace.space.get(selected)
+              ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
+                  onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
+                  onInstance={key => select(key, key)} />
+              : workspace?.editable
+                ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
+                : <div className="empty">Select a node.</div>}
+          </Guard>
         </div>
       </div>
       {showFindings && (
-        <div className="findings">
-          {findings.length === 0 && <div className="empty">No findings.</div>}
-          {findings.map((f, i) => (
-            <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
-              onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>
-              <span className="severity">{f.severity}</span> <span className="rule" title={RULES[f.rule]}>{f.rule}</span> {f.message}
-            </div>
-          ))}
-        </div>
+        <Guard name="list of findings" resetKey={revision}>
+          <div className="findings">
+            {findings.length === 0 && <div className="empty">No findings.</div>}
+            {findings.map((f, i) => (
+              <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
+                onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>
+                <span className="severity">{f.severity}</span> <span className="rule" title={RULES[f.rule]}>{f.rule}</span> {f.message}
+              </div>
+            ))}
+          </div>
+        </Guard>
       )}
       <div className={`status${status.warn ? ' warn' : ''}`}>{status.text}</div>
       {ask && <AskDialog ask={ask} onClose={() => setAsk(undefined)} />}
