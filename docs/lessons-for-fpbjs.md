@@ -289,6 +289,52 @@ back in through one careless import.
 *FPB.js:* the same split applies, and it is the one thing that would let a
 script generate or migrate FPB models without a page.
 
+## AutomationML Editor plugins (from the AML 3D Viewer)
+
+Read in the decompiled editor 6.4.3.5 during a review of the AML 3D Viewer
+plugin (`AML/AmlViewer3D`, details in its `docs/plan.md`).
+
+**The editor's API may name the wrong file.** `AMLEditor.AMLApplication.ActiveDocument`
+is set only when a file is loaded through `MainViewModel.LoadFromFile`. An .amlx
+opened through File > Open, New, Save As and Close leave it as it was, so it
+may still name the file opened before. The viewer takes `CAEXDocument.FilePath`
+first, then the container file from the main view model, and trusts the API
+only when its file name matches the document.
+*FPB plugin:* worth checking wherever it asks the API for the document's path.
+
+**No echo to suppress, but selections from other documents.** A selection a
+plugin raises is applied with `notify: false`, so the editor never reports it
+back through `ChangeSelectedObject`; echo guards are dead code. The trees of
+external libraries do report their selections, with objects of other
+`CAEXDocument`s; a plugin that follows the selection must ignore those.
+*FPB plugin:* both apply to its selection sync.
+
+**ApplicationClose is not the end.** The editor also sends it when a plugin
+makes it open another document, and then loads that one. A plugin that
+disposes its WebView2 there shows nothing afterwards; emptying the view is
+enough.
+
+**Stale answers from the page.** A document sent while the previous one is
+still loading can be answered out of order. A number sent with each `open`
+and returned with `loaded` lets the host drop late answers; the page also
+stops the superseded load, else repeated Reloads stack their work (measured:
+80 workers and 3 GB after ten quick Reloads).
+*FPB plugin:* the same applies to every request whose answer changes the state.
+
+**A cancelled navigation also ends in NavigationCompleted.** Blocking links
+and dropped files in `NavigationStarting` is right, but `NavigationCompleted`
+then reports `OperationCanceled` for a page that is still there. Treating that
+as a failure marked the page as not ready, and nothing reached it afterwards.
+
+**WPF cannot draw over WebView2.** A placeholder laid over the view stays
+invisible (airspace); the view has to be hidden while the placeholder shows.
+`CapturePreviewAsync` never returns while the view is hidden, so a probe
+takes such pictures with `RenderTargetBitmap`.
+
+**A probe that says where it hangs.** Results printed as they happen, not
+at the end, showed at once that a hang sat in the probe's own screenshot and
+not in the plugin.
+
 ## Tooling
 
 **Big data as lazy chunks.** The 4 MB base NodeSet is an `asset/source`
