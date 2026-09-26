@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd" xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris>
+    <Uri>http://example.org/Robustness/</Uri>
+  </NamespaceUris>
+  <Models>
+    <Model ModelUri="http://example.org/Robustness/" Version="1.0.0" PublicationDate="2026-09-26T17:52:56Z">
+      <RequiredModel ModelUri="http://opcfoundation.org/UA/" />
+    </Model>
+  </Models>
+  <Aliases>
+    <Alias Alias="HasComponent">i=47</Alias>
+    <Alias Alias="HasProperty">i=46</Alias>
+    <Alias Alias="HasSubtype">i=45</Alias>
+    <Alias Alias="HasTypeDefinition">i=40</Alias>
+    <Alias Alias="HasModellingRule">i=37</Alias>
+    <Alias Alias="Organizes">i=35</Alias>
+  </Aliases>
+  <UAObjectType NodeId="ns=1;i=1000" BrowseName="1:PumpType">
+    <DisplayName>PumpType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=58</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=1001</Reference>
+    </References>
+  </UAObjectType>
+  <UAVariable NodeId="ns=1;i=1001" BrowseName="1:Speed" ParentNodeId="ns=1;i=1000" DataType="i=24" ValueRank="-1">
+    <DisplayName>Speed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+    </References>
+  </UAVariable>
+  <UADataType NodeId="ns=1;i=1002" BrowseName="1:ResultType">
+    <DisplayName>ResultType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=22</Reference>
+      <Reference ReferenceType="i=38">ns=1;i=1003</Reference>
+      <Reference ReferenceType="i=38">ns=1;i=1004</Reference>
+      <Reference ReferenceType="i=38">ns=1;i=1005</Reference>
+    </References>
+    <Definition Name="1:ResultType">
+      <Field Name="Code" DataType="i=6" ValueRank="-1" />
+    </Definition>
+  </UADataType>
+  <UAObject NodeId="ns=1;i=1003" BrowseName="Default Binary" SymbolicName="DefaultBinary">
+    <DisplayName>Default Binary</DisplayName>
+    <References>
+      <Reference ReferenceType="i=38" IsForward="false">ns=1;i=1002</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1004" BrowseName="Default XML" SymbolicName="DefaultXML">
+    <DisplayName>Default XML</DisplayName>
+    <References>
+      <Reference ReferenceType="i=38" IsForward="false">ns=1;i=1002</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1005" BrowseName="Default JSON" SymbolicName="DefaultJSON">
+    <DisplayName>Default JSON</DisplayName>
+    <References>
+      <Reference ReferenceType="i=38" IsForward="false">ns=1;i=1002</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=76</Reference>
+    </References>
+  </UAObject>
+  <UADataType NodeId="ns=1;i=1006" BrowseName="1:ResultStateDataType">
+    <DisplayName>ResultStateDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=6</Reference>
+    </References>
+  </UADataType>
+  <UADataType NodeId="ns=1;i=1007" BrowseName="1:ModeEnum">
+    <DisplayName>ModeEnum</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=29</Reference>
+      <Reference ReferenceType="HasProperty">ns=1;i=1008</Reference>
+    </References>
+    <Definition Name="1:ModeEnum">
+      <Field Name="Off" Value="0" />
+      <Field Name="On" Value="1" />
+    </Definition>
+  </UADataType>
+  <UAVariable NodeId="ns=1;i=1008" BrowseName="EnumStrings" ParentNodeId="ns=1;i=1007" DataType="i=21" ValueRank="1" ArrayDimensions="2">
+    <DisplayName>EnumStrings</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1007</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+    </References>
+    <Value><ListOfLocalizedText xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"><LocalizedText><Text>Off</Text></LocalizedText><LocalizedText><Text>On</Text></LocalizedText></ListOfLocalizedText></Value>
+  </UAVariable>
+  <UADataType NodeId="ns=1;i=1009" BrowseName="1:CounterDataType">
+    <DisplayName>CounterDataType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=7</Reference>
+    </References>
+  </UADataType>
+  <UAObjectType NodeId="ns=1;i=1010" BrowseName="1:PumpStateMachineType">
+    <DisplayName>PumpStateMachineType</DisplayName>
+    <References>
+      <Reference ReferenceType="HasSubtype" IsForward="false">i=2771</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=1011</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=1013</Reference>
+      <Reference ReferenceType="HasComponent">ns=1;i=1015</Reference>
+    </References>
+  </UAObjectType>
+  <UAObject NodeId="ns=1;i=1011" BrowseName="1:Idle" ParentNodeId="ns=1;i=1010">
+    <DisplayName>Idle</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1010</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=2307</Reference>
+      <Reference ReferenceType="HasProperty">ns=1;i=1012</Reference>
+      <Reference ReferenceType="i=51" IsForward="false">ns=1;i=1015</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1012" BrowseName="StateNumber" ParentNodeId="ns=1;i=1011" DataType="i=7" ValueRank="-1">
+    <DisplayName>StateNumber</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1011</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+    </References>
+    <Value><UInt32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</UInt32></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1013" BrowseName="1:Running" ParentNodeId="ns=1;i=1010">
+    <DisplayName>Running</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1010</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=2307</Reference>
+      <Reference ReferenceType="HasProperty">ns=1;i=1014</Reference>
+      <Reference ReferenceType="i=52" IsForward="false">ns=1;i=1015</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1014" BrowseName="StateNumber" ParentNodeId="ns=1;i=1013" DataType="i=7" ValueRank="-1">
+    <DisplayName>StateNumber</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1013</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+    </References>
+    <Value><UInt32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">2</UInt32></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1015" BrowseName="1:IdleToRunning" ParentNodeId="ns=1;i=1010">
+    <DisplayName>IdleToRunning</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1010</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=2310</Reference>
+      <Reference ReferenceType="HasProperty">ns=1;i=1016</Reference>
+      <Reference ReferenceType="i=51">ns=1;i=1011</Reference>
+      <Reference ReferenceType="i=52">ns=1;i=1013</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1016" BrowseName="TransitionNumber" ParentNodeId="ns=1;i=1015" DataType="i=7" ValueRank="-1">
+    <DisplayName>TransitionNumber</DisplayName>
+    <References>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1015</Reference>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasModellingRule">i=78</Reference>
+    </References>
+    <Value><UInt32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</UInt32></Value>
+  </UAVariable>
+</UANodeSet>

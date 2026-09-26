@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build:web && playwright test",
     "build:web": "webpack --config webpack.config.js --mode production",
     "build:lib": "webpack --config webpack.lib.config.js --mode production && tsc -p tsconfig.lib.json",
     "verify:core": "node scripts/verify-core.cjs"
@@ -37,6 +38,7 @@
     "@babel/preset-env": "^7.29.7",
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
+    "@playwright/test": "^1.63.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "babel-loader": "^10.1.1",
@@ -55,8 +57,8 @@
     "diagram-js": "^15.26.0",
     "min-dash": "^5.1.0",
     "min-dom": "^5.3.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": ">=18",
+    "react-dom": ">=18",
     "tiny-svg": "^4.1.4"
   },
   "main": "dist/lib/nodeset.umd.js",
