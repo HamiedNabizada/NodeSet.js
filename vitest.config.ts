@@ -12,7 +12,7 @@ export default defineConfig({
   ],
   test: {
     environment: 'happy-dom',
-    include: ['tests/unit/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.{ts,tsx}'],
     globals: true,
     testTimeout: 20000,
   },

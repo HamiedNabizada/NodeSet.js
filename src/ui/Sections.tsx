@@ -81,10 +81,11 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   const [draft, setDraft] = useState<FieldDraft[]>(current);
   const currentKey = fieldsKey(current);
   useEffect(() => setDraft(current), [currentKey]);
+  const changed = !!kind && fieldsKey(draft) !== currentKey;
+  // Before the return below: a DataType without fields calls no fewer hooks than one with.
+  useDraft('Fields', changed);
   if (!kind) return null;
   const [legend, noun] = FIELD_LEGENDS[kind];
-  const changed = fieldsKey(draft) !== currentKey;
-  useDraft('Fields', changed);
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
 
   return (
