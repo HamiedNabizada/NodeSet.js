@@ -172,6 +172,8 @@ export class Workspace {
     if (!this.editable) throw new Error('Nothing is open.');
     writeLayout(this.editable, this.layout);
     this.syncRequiredModels();
+    // What saving wrote into the file is no step of undo.
+    this.editor?.acceptOutsideChanges();
     return writeNodeSet(this.editable);
   }
 

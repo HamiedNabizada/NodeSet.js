@@ -4,9 +4,13 @@
 // the inverse HasSubtype to its supertype. New nodes get the next free
 // numeric NodeId of the model's namespace.
 //
-// Undo and redo work on snapshots of the file. That is simple, and a copy
-// takes 25 ms for a model like MachineVision, but 200 ms and 23 MB for one
-// like Pumps; undoLimit keeps the number of steps in proportion.
+// Undo keeps what a step changed, not a copy of the file: after every change
+// each node is written as JSON and compared with the state before, and the
+// nodes that differ are kept as they were and as they became, with where
+// added and removed nodes stood. A copy of the whole file had cost 250 ms and
+// 23 MB a step for a model like Pumps; comparing costs about half the time,
+// and a step keeps a few KB. Writing every node is what makes it safe: no
+// edit can change a node without the step noticing.
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
@@ -114,20 +118,58 @@ export function newModel(modelUri: string, version = '1.0.0'): NodeSetFile {
   };
 }
 
+/** How many steps undo keeps. */
+const UNDO_STEPS = 100;
+
+/** The file apart from its nodes: namespaces, models, aliases, what the modeler does not name. */
+function metaOf(file: NodeSetFile): string {
+  return JSON.stringify({
+    namespaceUris: file.namespaceUris, serverUris: file.serverUris, models: file.models, aliases: [...file.aliases],
+    lastModified: file.lastModified, otherAttributes: file.otherAttributes, otherElements: file.otherElements,
+  });
+}
+
+function setMeta(file: NodeSetFile, json: string): void {
+  const m = JSON.parse(json);
+  file.namespaceUris = m.namespaceUris;
+  file.serverUris = m.serverUris;
+  file.models = m.models;
+  file.aliases = new Map(m.aliases);
+  file.lastModified = m.lastModified;
+  file.otherAttributes = m.otherAttributes;
+  file.otherElements = m.otherElements;
+}
+
+/** The file as JSON, node by node, as undo compares it. */
+interface Recorded {
+  nodes: Map<string, string>;
+  order: string[];
+  meta: string;
+}
+
+type Side = 'before' | 'after';
+
 /**
- * How many undo steps a model keeps. Every step is a copy of the whole file,
- * about 2 KB a node (measured: 1.5 MB for MachineVision's 790 nodes, 23 MB for
- * Pumps' 9624), so a large model keeps fewer: at most 100 steps and about
- * 200 000 copied nodes, never fewer than 10 steps.
+ * One undo step: the nodes it changed as JSON before and after (undefined
+ * where the node was not there), where added and removed nodes stood, and the
+ * rest of the file when that changed.
  */
-export function undoLimit(nodes: number): number {
-  return Math.max(10, Math.min(100, Math.floor(200_000 / Math.max(1, nodes))));
+interface Step {
+  before: Map<string, string | undefined>;
+  after: Map<string, string | undefined>;
+  /** Index in that side's order of each node only that side has. */
+  placed: Record<Side, [string, number][]>;
+  /** Both orders in full, only when the nodes both sides have changed their order. */
+  order?: Record<Side, string[]>;
+  meta?: Record<Side, string>;
 }
 
 export class ModelEditor {
-  private readonly undoStack: NodeSetFile[] = [];
-  private readonly redoStack: NodeSetFile[] = [];
-  /** Inside a batch the stack is cut back to its depth afterwards, so nothing is dropped meanwhile. */
+  private readonly undoStack: Step[] = [];
+  private readonly redoStack: Step[] = [];
+  /** The file as the last step left it; recorded at the first change. */
+  private recordedState?: Recorded;
+  /** Inside a batch the changes become one step when the outermost batch ends. */
   private batching = 0;
 
   /**
@@ -143,70 +185,164 @@ export class ModelEditor {
   get canUndo(): boolean { return this.undoStack.length > 0; }
   get canRedo(): boolean { return this.redoStack.length > 0; }
 
+  /** How much undo and redo hold, in characters of JSON. */
+  get undoCharacters(): number {
+    let count = 0;
+    for (const step of [...this.undoStack, ...this.redoStack]) {
+      for (const side of [step.before, step.after]) for (const json of side.values()) count += json?.length ?? 0;
+      for (const [id] of [...step.placed.before, ...step.placed.after]) count += id.length;
+      if (step.order) count += [...step.order.before, ...step.order.after].reduce((n, id) => n + id.length, 0);
+      if (step.meta) count += step.meta.before.length + step.meta.after.length;
+    }
+    return count;
+  }
+
   undo(): void {
-    const previous = this.undoStack.pop();
-    if (!previous) return;
-    this.redoStack.push(structuredClone(this.file));
-    this.replace(previous);
+    const step = this.undoStack.pop();
+    if (!step) return;
+    this.apply(step, 'before');
+    this.redoStack.push(step);
   }
 
   redo(): void {
-    const next = this.redoStack.pop();
-    if (!next) return;
-    this.undoStack.push(structuredClone(this.file));
-    this.replace(next);
+    const step = this.redoStack.pop();
+    if (!step) return;
+    this.apply(step, 'after');
+    this.undoStack.push(step);
   }
 
-  private replace(file: NodeSetFile) {
-    this.file = file;
-    this.rebuild(file);
+  /**
+   * Takes the file as it is now as the state undo starts from, without a
+   * step: for changes made outside the editor, such as the required models
+   * and the layout that saving writes into the file.
+   */
+  acceptOutsideChanges(): void {
+    if (this.recordedState) this.recordedState = this.record();
   }
 
-  /** Remembers the file before a step, dropping the oldest steps beyond the limit. */
-  private remember(before: NodeSetFile) {
-    this.undoStack.push(before);
-    const excess = this.undoStack.length - undoLimit(this.file.nodes.length);
-    if (excess > 0 && this.batching === 0) this.undoStack.splice(0, excess);
-  }
-
-  /** Runs a change as one undo step. A failing change leaves the file as it was. */
   /**
    * Runs several edits as one step: undo takes them back together, and when
    * one fails none of them stays.
    */
   batch<T>(action: () => T): T {
-    const depth = this.undoStack.length;
-    const before = structuredClone(this.file);
+    this.recorded();
     this.batching++;
     try {
       const result = action();
-      this.undoStack.length = depth;
-      this.batching--;
-      this.remember(before);
-      this.redoStack.length = 0;
+      if (--this.batching === 0) this.commit();
       return result;
     } catch (e) {
-      this.undoStack.length = depth;
-      this.batching--;
-      this.file = before;
-      this.rebuild(before);
+      if (--this.batching === 0) this.revert();
       throw e;
     }
   }
 
+  /** Runs a change as one undo step. A failing change leaves the file as it was. */
   private change<T>(action: () => T): T {
-    const before = structuredClone(this.file);
+    this.recorded();
+    if (this.batching > 0) {
+      // The batch keeps or reverts the whole; what a later edit of it asks needs the index now.
+      const result = action();
+      this.rebuild(this.file);
+      return result;
+    }
     try {
       const result = action();
-      this.remember(before);
-      this.redoStack.length = 0;
+      this.commit();
       this.rebuild(this.file);
       return result;
     } catch (e) {
-      this.file = before;
-      this.rebuild(before);
+      this.revert();
       throw e;
     }
+  }
+
+  private record(): Recorded {
+    return {
+      nodes: new Map(this.file.nodes.map(n => [n.id, JSON.stringify(n)])),
+      order: this.file.nodes.map(n => n.id),
+      meta: metaOf(this.file),
+    };
+  }
+
+  private recorded(): Recorded {
+    return this.recordedState ??= this.record();
+  }
+
+  /** What changed since the recorded state, as a step (none when nothing did), and the state now. */
+  private diff(): { step?: Step; now: Recorded } {
+    const was = this.recorded();
+    const now = this.record();
+    const before = new Map<string, string | undefined>();
+    const after = new Map<string, string | undefined>();
+    for (const [id, json] of now.nodes) {
+      const old = was.nodes.get(id);
+      if (old !== json) { before.set(id, old); after.set(id, json); }
+    }
+    for (const [id, json] of was.nodes) if (!now.nodes.has(id)) { before.set(id, json); after.set(id, undefined); }
+
+    const placed: Record<Side, [string, number][]> = { before: [], after: [] };
+    was.order.forEach((id, i) => { if (!now.nodes.has(id)) placed.before.push([id, i]); });
+    now.order.forEach((id, i) => { if (!was.nodes.has(id)) placed.after.push([id, i]); });
+    const common = (order: string[], other: Map<string, string>) => order.filter(id => other.has(id));
+    const wasCommon = common(was.order, now.nodes);
+    const nowCommon = common(now.order, was.nodes);
+    const reordered = wasCommon.length !== nowCommon.length || wasCommon.some((id, i) => id !== nowCommon[i]);
+    const metaChanged = was.meta !== now.meta;
+    if (before.size === 0 && !reordered && !metaChanged) return { now };
+    return {
+      step: {
+        before, after, placed,
+        order: reordered ? { before: was.order, after: now.order } : undefined,
+        meta: metaChanged ? { before: was.meta, after: now.meta } : undefined,
+      },
+      now,
+    };
+  }
+
+  /** Keeps what the change did as a step, dropping the oldest beyond the limit. */
+  private commit(): void {
+    const { step, now } = this.diff();
+    this.recordedState = now;
+    if (!step) return;
+    this.undoStack.push(step);
+    if (this.undoStack.length > UNDO_STEPS) this.undoStack.splice(0, this.undoStack.length - UNDO_STEPS);
+    this.redoStack.length = 0;
+  }
+
+  /** Puts back what a failed change did. */
+  private revert(): void {
+    const { step } = this.diff();
+    if (step) this.apply(step, 'before');
+    else this.rebuild(this.file);
+  }
+
+  /** Brings the file to one side of a step; nodes the step did not touch keep their objects. */
+  private apply(step: Step, side: Side): void {
+    const changed = step[side];
+    const byId = new Map(this.file.nodes.map(n => [n.id, n]));
+    for (const [id, json] of changed) {
+      if (json === undefined) byId.delete(id);
+      else byId.set(id, JSON.parse(json) as UaNode);
+    }
+    let order: string[];
+    if (step.order) {
+      order = [...step.order[side]];
+    } else {
+      order = this.file.nodes.map(n => n.id).filter(id => changed.get(id) !== undefined || !changed.has(id));
+      for (const [id, index] of [...step.placed[side]].sort((a, b) => a[1] - b[1])) order.splice(index, 0, id);
+    }
+    this.file.nodes = order.map(id => byId.get(id)!);
+    if (step.meta) setMeta(this.file, step.meta[side]);
+
+    const state = this.recorded();
+    for (const [id, json] of changed) {
+      if (json === undefined) state.nodes.delete(id);
+      else state.nodes.set(id, json);
+    }
+    state.order = order;
+    if (step.meta) state.meta = step.meta[side];
+    this.rebuild(this.file);
   }
 
   private node(key: string): UaNode {

@@ -6,6 +6,14 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Changed
+
+- Undo keeps what a step changed instead of a copy of the whole file: each
+  node is compared as JSON after every change, and a step keeps the nodes that
+  differ, before and after. On Pumps (9624 nodes) a step keeps a few KB instead
+  of 23 MB, undo takes 60 ms instead of 400, an edit 230 ms instead of 300 to
+  400, and every model keeps 100 steps again (Pumps had 20).
+
 ## [0.1.2] - 2026-09-27
 
 ### Fixed
