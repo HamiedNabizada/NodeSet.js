@@ -113,9 +113,21 @@ export function newModel(modelUri: string, version = '1.0.0'): NodeSetFile {
   };
 }
 
+/**
+ * How many undo steps a model keeps. Every step is a copy of the whole file,
+ * about 2 KB a node (measured: 1.5 MB for MachineVision's 790 nodes, 23 MB for
+ * Pumps' 9624), so a large model keeps fewer: at most 100 steps and about
+ * 200 000 copied nodes, never fewer than 10 steps.
+ */
+export function undoLimit(nodes: number): number {
+  return Math.max(10, Math.min(100, Math.floor(200_000 / Math.max(1, nodes))));
+}
+
 export class ModelEditor {
   private readonly undoStack: NodeSetFile[] = [];
   private readonly redoStack: NodeSetFile[] = [];
+  /** Inside a batch the stack is cut back to its depth afterwards, so nothing is dropped meanwhile. */
+  private batching = 0;
 
   /**
    * @param file the editable file, changed in place
@@ -149,6 +161,13 @@ export class ModelEditor {
     this.rebuild(file);
   }
 
+  /** Remembers the file before a step, dropping the oldest steps beyond the limit. */
+  private remember(before: NodeSetFile) {
+    this.undoStack.push(before);
+    const excess = this.undoStack.length - undoLimit(this.file.nodes.length);
+    if (excess > 0 && this.batching === 0) this.undoStack.splice(0, excess);
+  }
+
   /** Runs a change as one undo step. A failing change leaves the file as it was. */
   /**
    * Runs several edits as one step: undo takes them back together, and when
@@ -157,14 +176,17 @@ export class ModelEditor {
   batch<T>(action: () => T): T {
     const depth = this.undoStack.length;
     const before = structuredClone(this.file);
+    this.batching++;
     try {
       const result = action();
       this.undoStack.length = depth;
-      this.undoStack.push(before);
+      this.batching--;
+      this.remember(before);
       this.redoStack.length = 0;
       return result;
     } catch (e) {
       this.undoStack.length = depth;
+      this.batching--;
       this.file = before;
       this.rebuild(before);
       throw e;
@@ -175,7 +197,7 @@ export class ModelEditor {
     const before = structuredClone(this.file);
     try {
       const result = action();
-      this.undoStack.push(before);
+      this.remember(before);
       this.redoStack.length = 0;
       this.rebuild(this.file);
       return result;
