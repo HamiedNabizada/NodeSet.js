@@ -1,6 +1,6 @@
 {
   "name": "nodeset-js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Graphical modeler for OPC UA information models: types and instances in the notation of OPC 10000-3 Annex C, stored as NodeSet2.",
   "license": "MIT",
   "author": "Hamied Nabizada",

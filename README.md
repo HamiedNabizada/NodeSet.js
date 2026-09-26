@@ -18,7 +18,7 @@ Inside the AutomationML Editor it runs in the Modeler tab of AMLOpcUa, which
 opens a namespace of the document and imports the result back
 ([AMLOpcUa docs/modeler.md](https://github.com/hsu-aut/AMLOpcUa/blob/main/docs/modeler.md)).
 
-Status: in development, see [docs/plan.md](docs/plan.md).
+Status: in development.
 
 ```bash
 npm install

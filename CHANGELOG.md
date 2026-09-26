@@ -6,6 +6,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-27
+
 ### Fixed
 
 - Undo kept a copy of the whole file for every step, without end: about

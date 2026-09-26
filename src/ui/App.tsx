@@ -25,7 +25,7 @@ const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'Re
 type Status = { text: string; warn?: boolean };
 
 /** Told to the host in "ready". */
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 
 const OBJECTS = uaKey(85);
 
