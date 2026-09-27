@@ -23,7 +23,7 @@ test('models a type with a state machine and saves it as a NodeSet', async ({ pa
     await page.getByRole('button', { name: 'Add state' }).click();
   }
   await page.getByPlaceholder('New transition').fill('IdleToRunning');
-  const ends = page.locator('.row.wrap select');
+  const ends = page.locator('.row.wrap', { has: page.getByPlaceholder('New transition') }).locator('select');
   await ends.nth(0).selectOption({ label: 'Idle' });
   await ends.nth(1).selectOption({ label: 'Running' });
   await page.getByRole('button', { name: 'Add transition' }).click();
