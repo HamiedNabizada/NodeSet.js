@@ -728,6 +728,44 @@ export class ModelEditor {
     });
   }
 
+  /**
+   * Gives a state of a machine type a machine of its own (OPC 10000-5,
+   * SubStateMachine): a component of the machine type named after the state,
+   * of the given machine type and Mandatory, which the state refers to with
+   * HasSubStateMachine. Another type replaces the machine, undefined removes it.
+   * Returns the machine's node, if any.
+   */
+  setSubStateMachine(type: string, state: string, subType: string | undefined): string | undefined {
+    return this.change(() => {
+      const machine = this.machineType(type);
+      const s = this.node(state);
+      if (!this.space().isSubtypeOf(this.space().typeDefinition(s)?.id ?? '', SM.StateType)) {
+        throw new EditError(`'${s.browseName.name}' is no state.`);
+      }
+      if (subType) {
+        const sub = this.space().get(subType);
+        if (!sub || sub.nodeClass !== 'ObjectType' || !this.space().isSubtypeOf(subType, SM.StateMachineType)) {
+          throw new EditError(`'${sub?.browseName.name ?? subType}' is no state machine type.`);
+        }
+        if (subType === machine.id || this.space().isSubtypeOf(subType, machine.id)) {
+          throw new EditError(`'${machine.browseName.name}' cannot hold itself as the machine of one of its states.`);
+        }
+      }
+      // The machine the state had goes, with what it holds.
+      const old = s.references.filter(r => r.type === SM.HasSubStateMachine && r.isForward && this.owns(r.target));
+      for (const r of old) this.removeNodes(this.ownedSubtree(this.node(r.target)));
+      s.references = s.references.filter(r => !(r.type === SM.HasSubStateMachine && r.isForward));
+      if (!subType) return undefined;
+      // The index still holds the removed machine until it is rebuilt.
+      if (old.length > 0) this.rebuild(this.file);
+      const object = this.namedChild(machine, `${s.browseName.name}StateMachine`, 'Object', subType);
+      object.references.push({ type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory });
+      s.references.push({ type: SM.HasSubStateMachine, isForward: true, target: object.id });
+      object.references.push({ type: SM.HasSubStateMachine, isForward: false, target: s.id });
+      return object.id;
+    });
+  }
+
   /** A transition between two states of the same machine type. */
   addTransition(type: string, name: string, number: number, from: string, to: string, cause?: string): string {
     return this.change(() => {
@@ -1124,17 +1162,7 @@ export class ModelEditor {
   delete(key: string): string[] {
     return this.change(() => {
       const root = this.node(key);
-      const doomed = new Set<string>([root.id]);
-      const collect = (n: UaNode) => {
-        for (const c of this.space().children(n)) {
-          if (doomed.has(c.node.id) || !this.file.nodes.includes(c.node)) continue;
-          // Only what this node holds as its own (its ParentNodeId), not what it merely organizes.
-          if (c.node.parent !== n.id) continue;
-          doomed.add(c.node.id);
-          collect(c.node);
-        }
-      };
-      collect(root);
+      const doomed = this.ownedSubtree(root);
       // A DataType's encodings go with it.
       for (const key of [...doomed]) {
         for (const e of this.space().out(key, HAS_ENCODING, false)) if (this.owns(e.target)) doomed.add(e.target);
@@ -1145,6 +1173,21 @@ export class ModelEditor {
       this.removeNodes(doomed);
       return [...doomed];
     });
+  }
+
+  /** A node and what it holds as its own (its ParentNodeId), not what it merely organizes. */
+  private ownedSubtree(root: UaNode): Set<string> {
+    const doomed = new Set<string>([root.id]);
+    const collect = (n: UaNode) => {
+      for (const c of this.space().children(n)) {
+        if (doomed.has(c.node.id) || !this.file.nodes.includes(c.node)) continue;
+        if (c.node.parent !== n.id) continue;
+        doomed.add(c.node.id);
+        collect(c.node);
+      }
+    };
+    collect(root);
+    return doomed;
   }
 
   private replaceSingle(n: UaNode, type: string, isForward: boolean, target: string) {

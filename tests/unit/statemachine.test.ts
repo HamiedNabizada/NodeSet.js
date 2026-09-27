@@ -101,3 +101,56 @@ describe('Finite state machines', () => {
     expect(new Set(places).size).toBe(2);
   });
 });
+
+describe('Sub-state machines', () => {
+  const HAS_SUB_STATE_MACHINE = uaKey(117);
+
+  async function machines() {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Machine/');
+    const e = ws.editor!;
+    const main = e.addStateMachineType('MainStateMachineType');
+    const running = e.addState(main, 'Running', 1);
+    const sub = e.addStateMachineType('ExecuteStateMachineType');
+    e.addState(sub, 'Starting', 1);
+    const other = e.addStateMachineType('OtherStateMachineType');
+    return { ws, e, main, running, sub, other };
+  }
+
+  it('gives a state a machine of its own, and reads it back', async () => {
+    const { ws, e, main, running, sub } = await machines();
+
+    const object = e.setSubStateMachine(main, running, sub)!;
+
+    const space = ws.space;
+    const state = readStateMachine(space, space.get(main)!).states.find(s => s.key === running)!;
+    expect(state.subMachine).toEqual({ key: object, name: 'RunningStateMachine', type: sub, typeName: 'ExecuteStateMachineType' });
+    expect(space.out(running, HAS_SUB_STATE_MACHINE).map(r => r.target)).toEqual([object]);
+    expect(space.typeDefinition(space.get(object)!)!.id).toBe(sub);
+    expect(space.out(object, uaKey(37)).map(r => r.target)).toEqual([RULE.Mandatory]);
+    expect(space.parentOf(space.get(object)!)!.id).toBe(main);
+  });
+
+  it('replaces the machine of a state, and removes it without leaving a reference behind', async () => {
+    const { ws, e, main, running, sub, other } = await machines();
+    e.setSubStateMachine(main, running, sub);
+
+    const replaced = e.setSubStateMachine(main, running, other)!;
+    const state = () => readStateMachine(ws.space, ws.space.get(main)!).states.find(s => s.key === running)!;
+    expect(state().subMachine?.type).toBe(other);
+    expect(ws.space.children(ws.space.get(main)!).filter(c => c.node.browseName.name === 'RunningStateMachine')).toHaveLength(1);
+
+    e.setSubStateMachine(main, running, undefined);
+    expect(state().subMachine).toBeUndefined();
+    expect(ws.space.get(replaced)).toBeUndefined();
+    expect(ws.editable!.nodes.flatMap(n => n.references).some(r => r.target === replaced)).toBe(false);
+  });
+
+  it('refuses a type that is no state machine, and the machine itself', async () => {
+    const { e, main, running } = await machines();
+    const plain = e.addType('ObjectType', 'PlainType');
+
+    expect(() => e.setSubStateMachine(main, running, plain)).toThrow(EditError);
+    expect(() => e.setSubStateMachine(main, running, main)).toThrow(EditError);
+  });
+});
