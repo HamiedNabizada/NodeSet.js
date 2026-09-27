@@ -17,8 +17,10 @@ import { insideType } from './checks';
 import { builtInOf, matrixXml, structureOf, structureValue, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
+import { Message, MessageError, msg } from './message';
 
-export class EditError extends Error {}
+/** A change the model does not allow; its message is English, its template translatable. */
+export class EditError extends MessageError {}
 
 export const TYPE_DEFAULTS = {
   ObjectType: { supertype: uaKey(58) }, // BaseObjectType
@@ -106,7 +108,7 @@ function escapeXml(s: string): string {
 }
 
 export function newModel(modelUri: string, version = '1.0.0'): NodeSetFile {
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(modelUri)) throw new EditError(`'${modelUri}' is not a URI.`);
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(modelUri)) throw new EditError(msg`'${modelUri}' is not a URI.`);
   return {
     namespaceUris: [modelUri],
     serverUris: [],
@@ -356,7 +358,7 @@ export class ModelEditor {
 
   private node(key: string): UaNode {
     const n = this.file.nodes.find(x => x.id === key);
-    if (!n) throw new EditError(`'${key}' is not part of the model being edited.`);
+    if (!n) throw new EditError(msg`'${key}' is not part of the model being edited.`);
     return n;
   }
 
@@ -371,7 +373,7 @@ export class ModelEditor {
 
   private create(nodeClass: NodeClass, name: string): UaNode {
     const trimmed = name.trim();
-    if (!trimmed) throw new EditError('A name is required.');
+    if (!trimmed) throw new EditError(msg`A name is required.`);
     const n: UaNode = {
       id: this.nextId(),
       nodeClass,
@@ -390,7 +392,7 @@ export class ModelEditor {
     return this.change(() => {
       const base = supertype ?? TYPE_DEFAULTS[nodeClass].supertype;
       const baseNode = this.space().get(base);
-      if (!baseNode || baseNode.nodeClass !== nodeClass) throw new EditError(`The supertype must be a ${nodeClass}.`);
+      if (!baseNode || baseNode.nodeClass !== nodeClass) throw new EditError(msg`The supertype must be a ${nodeClass}.`);
       const t = this.create(nodeClass, name);
       t.references.push({ type: REF.HasSubtype, isForward: false, target: base });
       if (nodeClass === 'VariableType') { t.dataType = uaKey(24); t.valueRank = -2; } // BaseDataType, any rank
@@ -405,10 +407,10 @@ export class ModelEditor {
     return this.change(() => {
       const p = this.node(parent);
       if (!['ObjectType', 'VariableType', 'Object', 'Variable'].includes(p.nodeClass)) {
-        throw new EditError(`A ${p.nodeClass} cannot hold instance declarations.`);
+        throw new EditError(msg`A ${p.nodeClass} cannot hold instance declarations.`);
       }
       const siblings = this.space().children(p).map(c => c.node.browseName.name);
-      if (siblings.includes(name.trim())) throw new EditError(`'${p.browseName.name}' already has a child named '${name.trim()}'.`);
+      if (siblings.includes(name.trim())) throw new EditError(msg`'${p.browseName.name}' already has a child named '${name.trim()}'.`);
       const nodeClass: NodeClass = kind === 'Property' ? 'Variable' : kind;
       const d = this.create(nodeClass, name);
       const refType = kind === 'Property' ? REF.HasProperty : REF.HasComponent;
@@ -429,10 +431,10 @@ export class ModelEditor {
     this.change(() => {
       const n = this.node(key);
       const trimmed = name.trim();
-      if (!trimmed) throw new EditError('A name is required.');
+      if (!trimmed) throw new EditError(msg`A name is required.`);
       const parent = this.space().parentOf(n);
       if (parent && this.space().children(parent).some(c => c.node.id !== key && c.node.browseName.name === trimmed)) {
-        throw new EditError(`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
+        throw new EditError(msg`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
       }
       n.browseName = { ...n.browseName, name: trimmed };
       n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }];
@@ -476,8 +478,8 @@ export class ModelEditor {
     this.change(() => {
       const n = this.node(key);
       const base = this.space().get(supertype);
-      if (!base || base.nodeClass !== n.nodeClass) throw new EditError(`The supertype must be a ${n.nodeClass}.`);
-      if (this.space().isSubtypeOf(supertype, key)) throw new EditError(`'${base.browseName.name}' is a subtype of '${n.browseName.name}'.`);
+      if (!base || base.nodeClass !== n.nodeClass) throw new EditError(msg`The supertype must be a ${n.nodeClass}.`);
+      if (this.space().isSubtypeOf(supertype, key)) throw new EditError(msg`'${base.browseName.name}' is a subtype of '${n.browseName.name}'.`);
       // The file may also hold the reference forward, on the old supertype.
       for (const other of this.file.nodes) {
         other.references = other.references.filter(r => !(r.type === REF.HasSubtype && r.isForward && r.target === key));
@@ -524,7 +526,7 @@ export class ModelEditor {
       const n = this.node(key);
       const t = this.space().get(type);
       const expected = n.nodeClass === 'Object' ? 'ObjectType' : n.nodeClass === 'Variable' ? 'VariableType' : undefined;
-      if (!expected || !t || t.nodeClass !== expected) throw new EditError(`The type definition of a ${n.nodeClass} must be a ${expected ?? 'type'}.`);
+      if (!expected || !t || t.nodeClass !== expected) throw new EditError(msg`The type definition of a ${n.nodeClass} must be a ${expected ?? 'type'}.`);
       this.replaceSingle(n, REF.HasTypeDefinition, true, type);
     });
   }
@@ -541,8 +543,8 @@ export class ModelEditor {
     this.change(() => {
       const n = this.node(key);
       const t = this.space().get(dataType);
-      if (!t || t.nodeClass !== 'DataType') throw new EditError('The data type must be a DataType.');
-      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no data type.`);
+      if (!t || t.nodeClass !== 'DataType') throw new EditError(msg`The data type must be a DataType.`);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no data type.`);
       n.dataType = dataType;
     });
   }
@@ -555,7 +557,7 @@ export class ModelEditor {
   setSymmetric(key: string, symmetric: boolean): void {
     this.change(() => {
       const n = this.node(key);
-      if (n.nodeClass !== 'ReferenceType') throw new EditError('Only a ReferenceType is symmetric or not.');
+      if (n.nodeClass !== 'ReferenceType') throw new EditError(msg`Only a ReferenceType is symmetric or not.`);
       n.symmetric = symmetric ? true : undefined;
       if (symmetric) n.inverseName = [];
     });
@@ -564,7 +566,7 @@ export class ModelEditor {
   setInverseName(key: string, inverseName: string): void {
     this.change(() => {
       const n = this.node(key);
-      if (n.nodeClass !== 'ReferenceType') throw new EditError('Only a ReferenceType has an InverseName.');
+      if (n.nodeClass !== 'ReferenceType') throw new EditError(msg`Only a ReferenceType has an InverseName.`);
       n.inverseName = inverseName.trim() ? [{ text: inverseName.trim() }] : [];
     });
   }
@@ -576,13 +578,13 @@ export class ModelEditor {
   setArguments(method: string, which: 'Input' | 'Output', args: Argument[]): void {
     this.change(() => {
       const m = this.node(method);
-      if (m.nodeClass !== 'Method') throw new EditError('Only a Method has arguments.');
+      if (m.nodeClass !== 'Method') throw new EditError(msg`Only a Method has arguments.`);
       const names = new Set<string>();
       for (const a of args) {
-        if (!a.name.trim()) throw new EditError('Every argument needs a name.');
-        if (names.has(a.name.trim())) throw new EditError(`Two arguments are named '${a.name.trim()}'.`);
+        if (!a.name.trim()) throw new EditError(msg`Every argument needs a name.`);
+        if (names.has(a.name.trim())) throw new EditError(msg`Two arguments are named '${a.name.trim()}'.`);
         names.add(a.name.trim());
-        if (this.space().get(a.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${a.name}' is not a DataType.`);
+        if (this.space().get(a.dataType)?.nodeClass !== 'DataType') throw new EditError(msg`The data type of '${a.name}' is not a DataType.`);
       }
       const browseName = `${which}Arguments`;
       const existing = this.space().children(m).find(c => c.node.browseName.name === browseName && c.node.browseName.namespaceUri === UA_NAMESPACE);
@@ -623,7 +625,7 @@ export class ModelEditor {
   setFields(dataType: string, fields: FieldInput[]): void {
     this.change(() => {
       const d = this.node(dataType);
-      if (d.nodeClass !== 'DataType') throw new EditError('Only a DataType has fields.');
+      if (d.nodeClass !== 'DataType') throw new EditError(msg`Only a DataType has fields.`);
       this.writeFields(d, fields, d.id);
     });
   }
@@ -633,25 +635,28 @@ export class ModelEditor {
     const space = this.space();
     const kind = fieldKind(space, kindOf);
     if (!kind) {
-      throw new EditError('Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).');
+      throw new EditError(msg`Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).`);
     }
     const numbered = kind === 'enumeration' || kind === 'optionSet';
     const names = new Set<string>();
     for (const f of fields) {
-      if (!f.name.trim()) throw new EditError('Every field needs a name.');
-      if (names.has(f.name.trim())) throw new EditError(`Two fields are named '${f.name.trim()}'.`);
+      if (!f.name.trim()) throw new EditError(msg`Every field needs a name.`);
+      if (names.has(f.name.trim())) throw new EditError(msg`Two fields are named '${f.name.trim()}'.`);
       names.add(f.name.trim());
-      if (!numbered && space.get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(`The data type of '${f.name}' is not a DataType.`);
-      if (kind === 'union' && f.isOptional) throw new EditError('The fields of a union are not optional; exactly one of them is set.');
+      if (!numbered && space.get(f.dataType)?.nodeClass !== 'DataType') throw new EditError(msg`The data type of '${f.name}' is not a DataType.`);
+      if (kind === 'union' && f.isOptional) throw new EditError(msg`The fields of a union are not optional; exactly one of them is set.`);
     }
     if (numbered) {
       const values = fields.map((f, i) => f.value ?? i);
-      const what = kind === 'enumeration' ? 'Enumeration values' : 'Bits';
-      if (values.some(v => !Number.isInteger(v))) throw new EditError(`${what} are integers.`);
-      if (new Set(values).size !== values.length) throw new EditError(`Two ${kind === 'enumeration' ? 'enumeration values' : 'options'} are the same.`);
+      if (values.some(v => !Number.isInteger(v))) {
+        throw new EditError(kind === 'enumeration' ? msg`Enumeration values are integers.` : msg`Bits are integers.`);
+      }
+      if (new Set(values).size !== values.length) {
+        throw new EditError(kind === 'enumeration' ? msg`Two enumeration values are the same.` : msg`Two options are the same.`);
+      }
       const bits = kind === 'optionSet' ? optionBits(space, kindOf) : undefined;
       if (kind === 'optionSet' && values.some(v => v < 0 || (bits !== undefined && v >= bits))) {
-        throw new EditError(`Bits of '${d.browseName.name}' are 0 to ${(bits ?? 1) - 1}.`);
+        throw new EditError(msg`Bits of '${d.browseName.name}' are 0 to ${(bits ?? 1) - 1}.`);
       }
     }
     const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
@@ -755,15 +760,15 @@ export class ModelEditor {
       const machine = this.machineType(type);
       const s = this.node(state);
       if (!this.space().isSubtypeOf(this.space().typeDefinition(s)?.id ?? '', SM.StateType)) {
-        throw new EditError(`'${s.browseName.name}' is no state.`);
+        throw new EditError(msg`'${s.browseName.name}' is no state.`);
       }
       if (subType) {
         const sub = this.space().get(subType);
         if (!sub || sub.nodeClass !== 'ObjectType' || !this.space().isSubtypeOf(subType, SM.StateMachineType)) {
-          throw new EditError(`'${sub?.browseName.name ?? subType}' is no state machine type.`);
+          throw new EditError(msg`'${sub?.browseName.name ?? subType}' is no state machine type.`);
         }
         if (subType === machine.id || this.space().isSubtypeOf(subType, machine.id)) {
-          throw new EditError(`'${machine.browseName.name}' cannot hold itself as the machine of one of its states.`);
+          throw new EditError(msg`'${machine.browseName.name}' cannot hold itself as the machine of one of its states.`);
         }
       }
       // The machine the state had goes, with what it holds.
@@ -810,7 +815,7 @@ export class ModelEditor {
   private machineType(key: string): UaNode {
     const t = this.node(key);
     if (!this.space().isSubtypeOf(t.id, SM.FiniteStateMachineType)) {
-      throw new EditError(`'${t.browseName.name}' is no finite state machine; its type does not derive from FiniteStateMachineType.`);
+      throw new EditError(msg`'${t.browseName.name}' is no finite state machine; its type does not derive from FiniteStateMachineType.`);
     }
     return t;
   }
@@ -819,7 +824,7 @@ export class ModelEditor {
   private namedChild(parent: UaNode, name: string, nodeClass: NodeClass, typeDefinition: string): UaNode {
     const trimmed = name.trim();
     if (this.space().children(parent).some(c => c.node.browseName.name === trimmed)) {
-      throw new EditError(`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
+      throw new EditError(msg`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
     }
     const n = this.create(nodeClass, trimmed);
     parent.references.push({ type: REF.HasComponent, isForward: true, target: n.id });
@@ -856,11 +861,11 @@ export class ModelEditor {
     transition.references = transition.references.filter(r => !(r.type === type && r.isForward));
     if (!target) return;
     const node = this.space().get(target);
-    if (!node) throw new EditError('The node of the reference is unknown.');
+    if (!node) throw new EditError(msg`The node of the reference is unknown.`);
     if (type !== SM.HasCause && !this.space().isSubtypeOf(node.references.find(r => r.type === REF.HasTypeDefinition)?.target ?? '', SM.StateType)) {
-      throw new EditError(`'${node.browseName.name}' is no state of this machine.`);
+      throw new EditError(msg`'${node.browseName.name}' is no state of this machine.`);
     }
-    if (type === SM.HasCause && node.nodeClass !== 'Method') throw new EditError(`'${node.browseName.name}' is no method.`);
+    if (type === SM.HasCause && node.nodeClass !== 'Method') throw new EditError(msg`'${node.browseName.name}' is no method.`);
     transition.references.push({ type, isForward: true, target });
     const own = this.file.nodes.find(n => n.id === target);
     if (own) own.references.push({ type, isForward: false, target: transition.id });
@@ -925,15 +930,15 @@ export class ModelEditor {
     return this.change(() => {
       const space = this.space();
       const t = space.get(type);
-      if (!t || (t.nodeClass !== 'ObjectType' && t.nodeClass !== 'VariableType')) throw new EditError('Only ObjectTypes and VariableTypes have instances.');
-      if (t.isAbstract && !options.allowAbstract) throw new EditError(`'${t.browseName.name}' is abstract; OPC UA does not instantiate abstract types.`);
+      if (!t || (t.nodeClass !== 'ObjectType' && t.nodeClass !== 'VariableType')) throw new EditError(msg`Only ObjectTypes and VariableTypes have instances.`);
+      if (t.isAbstract && !options.allowAbstract) throw new EditError(msg`'${t.browseName.name}' is abstract; OPC UA does not instantiate abstract types.`);
       // A parent of another model (DI's DeviceSet, say) is not changed: the new
       // node alone holds the reference, as companion specifications do.
       const parent = options.parent ? space.get(options.parent) : undefined;
-      if (options.parent && !parent) throw new EditError(`There is no node '${options.parent}' in the loaded models.`);
+      if (options.parent && !parent) throw new EditError(msg`There is no node '${options.parent}' in the loaded models.`);
       const ownParent = parent && this.owns(parent.id) ? this.node(parent.id) : undefined;
       if (parent && space.children(parent).some(c => c.node.browseName.name === name.trim())) {
-        throw new EditError(`'${parent.browseName.name}' already has a child named '${name.trim()}'.`);
+        throw new EditError(msg`'${parent.browseName.name}' already has a child named '${name.trim()}'.`);
       }
 
       const mapping = new Map<string, string>();
@@ -1034,7 +1039,7 @@ export class ModelEditor {
 
   private fill(parent: UaNode, declarations: Map<string, Declaration>, path: string,
     options: InstantiateOptions, mapping: Map<string, string>, depth: number) {
-    if (depth > 20) throw new EditError('The type nests its declarations more than 20 levels deep.');
+    if (depth > 20) throw new EditError(msg`The type nests its declarations more than 20 levels deep.`);
     const space = this.space();
     for (const declaration of declarations.values()) {
       const { node: d, refType } = declaration;
@@ -1073,17 +1078,17 @@ export class ModelEditor {
   setValue(key: string, text: string | undefined): void {
     this.change(() => {
       const n = this.node(key);
-      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
-      if (n.arguments) throw new EditError('Arguments are edited in their own section.');
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no value.`);
+      if (n.arguments) throw new EditError(msg`Arguments are edited in their own section.`);
       if (text === undefined || text.trim() === '') { n.valueXml = undefined; n.extensionObjects = undefined; return; }
       const builtIn = builtInOf(this.space(), n.dataType);
-      if (!builtIn) throw new EditError('Values of this DataType are structures; the panel does not edit them.');
+      if (!builtIn) throw new EditError(msg`Values of this DataType are structures; the panel does not edit them.`);
       try {
         const rank = n.valueRank ?? -1;
         n.valueXml = rank >= 2 ? matrixXml(builtIn, text) : valueXml(builtIn, text, rank >= 0);
         n.extensionObjects = undefined;
       } catch (e) {
-        if (e instanceof ValueError) throw new EditError(e.message);
+        if (e instanceof ValueError) throw new EditError(new Message(e.template, e.args));
         throw e;
       }
     });
@@ -1096,16 +1101,16 @@ export class ModelEditor {
   setStructuredValue(key: string, values: Record<string, string> | undefined): void {
     this.change(() => {
       const n = this.node(key);
-      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no value.`);
       if (values === undefined) { n.valueXml = undefined; n.extensionObjects = undefined; return; }
-      if ((n.valueRank ?? -1) >= 0) throw new EditError('The panel edits single structures, not arrays of them.');
+      if ((n.valueRank ?? -1) >= 0) throw new EditError(msg`The panel edits single structures, not arrays of them.`);
       const shape = structureOf(this.space(), n.dataType);
-      if (!shape) throw new EditError('The panel edits structures whose fields are all built-in types and not optional.');
+      if (!shape) throw new EditError(msg`The panel edits structures whose fields are all built-in types and not optional.`);
       try {
         n.extensionObjects = { list: false, items: [structureValue(shape, values)] };
         n.valueXml = undefined;
       } catch (e) {
-        if (e instanceof ValueError) throw new EditError(e.message);
+        if (e instanceof ValueError) throw new EditError(new Message(e.template, e.args));
         throw e;
       }
     });
@@ -1119,17 +1124,17 @@ export class ModelEditor {
   setStructureValue(key: string, items: StructValue[] | undefined): void {
     this.change(() => {
       const n = this.node(key);
-      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(`A ${n.nodeClass} has no value.`);
+      if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no value.`);
       if (items === undefined) { n.valueXml = undefined; n.extensionObjects = undefined; return; }
       const list = (n.valueRank ?? -1) >= 0;
-      if (!list && items.length !== 1) throw new EditError('A scalar value is one structure.');
+      if (!list && items.length !== 1) throw new EditError(msg`A scalar value is one structure.`);
       const shape = structShape(this.space(), n.dataType);
-      if (!shape) throw new EditError('Values of this DataType are not edited here.');
+      if (!shape) throw new EditError(msg`Values of this DataType are not edited here.`);
       try {
         n.extensionObjects = { list, items: structureObjects(this.space(), shape, items) };
         n.valueXml = undefined;
       } catch (e) {
-        if (e instanceof ValueError) throw new EditError(e.message);
+        if (e instanceof ValueError) throw new EditError(new Message(e.template, e.args));
         throw e;
       }
     });
@@ -1139,10 +1144,10 @@ export class ModelEditor {
   setModelInfo(version: string, publicationDate: string): void {
     this.change(() => {
       const m = this.file.models[0];
-      if (!m) throw new EditError('The file declares no model.');
-      if (!version.trim()) throw new EditError('A version is required.');
+      if (!m) throw new EditError(msg`The file declares no model.`);
+      if (!version.trim()) throw new EditError(msg`A version is required.`);
       const date = new Date(publicationDate);
-      if (Number.isNaN(date.getTime())) throw new EditError(`'${publicationDate}' is not a date.`);
+      if (Number.isNaN(date.getTime())) throw new EditError(msg`'${publicationDate}' is not a date.`);
       m.version = version.trim();
       m.publicationDate = date.toISOString().replace(/\.\d+Z$/, 'Z');
     });
@@ -1156,9 +1161,9 @@ export class ModelEditor {
   addReference(source: string, type: string, target: string): void {
     this.change(() => {
       const s = this.node(source);
-      if (!this.space().get(target)) throw new EditError(`Unknown target '${target}'.`);
+      if (!this.space().get(target)) throw new EditError(msg`Unknown target '${target}'.`);
       const t = this.space().get(type);
-      if (!t || t.nodeClass !== 'ReferenceType') throw new EditError('The reference type must be a ReferenceType.');
+      if (!t || t.nodeClass !== 'ReferenceType') throw new EditError(msg`The reference type must be a ReferenceType.`);
       if (s.references.some(r => r.type === type && r.isForward && r.target === target)) return;
       s.references.push({ type, isForward: true, target });
     });
@@ -1184,7 +1189,7 @@ export class ModelEditor {
         for (const e of this.space().out(key, HAS_ENCODING, false)) if (this.owns(e.target)) doomed.add(e.target);
       }
       if (this.file.nodes.some(n => !doomed.has(n.id) && n.references.some(r => r.type === REF.HasSubtype && !r.isForward && doomed.has(r.target)))) {
-        throw new EditError(`'${root.browseName.name}' has subtypes; delete or move them first.`);
+        throw new EditError(msg`'${root.browseName.name}' has subtypes; delete or move them first.`);
       }
       this.removeNodes(doomed);
       return [...doomed];

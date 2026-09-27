@@ -8,6 +8,7 @@
 // Property, default Variable), ModellingRule (Mandatory or Optional, for
 // declarations of a type; default Mandatory), Description, Value.
 
+import { msg } from './message';
 import { RULE } from './address-space';
 import type { AddressSpace } from './address-space';
 import { DeclarationKind, EditError, ModelEditor } from './edit';
@@ -27,13 +28,13 @@ export interface SignalRow {
 export function parseSignals(text: string): SignalRow[] {
   const lines = text.replace(/^﻿/, '').split(/\r?\n/);
   const headerIndex = lines.findIndex(l => l.trim() !== '');
-  if (headerIndex < 0) throw new EditError('The file is empty.');
+  if (headerIndex < 0) throw new EditError(msg`The file is empty.`);
   const header = lines[headerIndex];
   const delimiter = [';', '\t', ','].map(d => ({ d, n: split(header, d).length })).sort((a, b) => b.n - a.n)[0].d;
   const columns = split(header, delimiter).map(c => c.trim().toLowerCase());
   const at = (names: string[]) => columns.findIndex(c => names.includes(c));
   const name = at(['name', 'browsename']);
-  if (name < 0) throw new EditError(`Line ${headerIndex + 1}: the header needs a column Name.`);
+  if (name < 0) throw new EditError(msg`Line ${headerIndex + 1}: the header needs a column Name.`);
   const index = {
     dataType: at(['datatype', 'data type', 'type']),
     kind: at(['kind', 'nodeclass']),
@@ -47,13 +48,13 @@ export function parseSignals(text: string): SignalRow[] {
     const cells = split(lines[i], delimiter);
     const cell = (k: number) => (k >= 0 && k < cells.length && cells[k].trim() !== '' ? cells[k].trim() : undefined);
     const n = cell(name);
-    if (!n) throw new EditError(`Line ${i + 1}: no name.`);
+    if (!n) throw new EditError(msg`Line ${i + 1}: no name.`);
     rows.push({
       line: i + 1, name: n, dataType: cell(index.dataType), kind: cell(index.kind),
       rule: cell(index.rule), description: cell(index.description), value: cell(index.value),
     });
   }
-  if (rows.length === 0) throw new EditError('The file has a header but no rows.');
+  if (rows.length === 0) throw new EditError(msg`The file has a header but no rows.`);
   return rows;
 }
 
@@ -84,17 +85,17 @@ export function addSignals(editor: ModelEditor, space: () => AddressSpace, paren
   return editor.batch(() => rows.map(row => {
     try {
       const kind: DeclarationKind = /^prop/i.test(row.kind ?? '') ? 'Property' : 'Variable';
-      if (row.kind && !/^(prop|var)/i.test(row.kind)) throw new EditError(`Kind '${row.kind}' is neither Variable nor Property.`);
+      if (row.kind && !/^(prop|var)/i.test(row.kind)) throw new EditError(msg`Kind '${row.kind}' is neither Variable nor Property.`);
       const rule = !row.rule || /^mand/i.test(row.rule) ? RULE.Mandatory
         : /^opt/i.test(row.rule) ? RULE.Optional
-        : (() => { throw new EditError(`ModellingRule '${row.rule}' is neither Mandatory nor Optional.`); })();
+        : (() => { throw new EditError(msg`ModellingRule '${row.rule}' is neither Mandatory nor Optional.`); })();
       const key = editor.addDeclaration(parent, kind, row.name, rule);
       editor.setDataType(key, row.dataType ? dataTypeNamed(space(), row.dataType) : uaKey(24));
       if (row.description) editor.setDescription(key, row.description);
       if (row.value !== undefined) editor.setValue(key, row.value);
       return key;
     } catch (e) {
-      if (e instanceof EditError) throw new EditError(`Line ${row.line} (${row.name}): ${e.message}`);
+      if (e instanceof EditError) throw new EditError(msg`Line ${row.line} (${row.name}): ${e}`);
       throw e;
     }
   }));
@@ -103,6 +104,6 @@ export function addSignals(editor: ModelEditor, space: () => AddressSpace, paren
 /** A DataType by its name; the edited model's own first, the base model's otherwise. */
 function dataTypeNamed(space: AddressSpace, name: string): string {
   const matches = space.ofClass('DataType').filter(n => n.browseName.name.toLowerCase() === name.toLowerCase());
-  if (matches.length === 0) throw new EditError(`There is no DataType named '${name}'.`);
+  if (matches.length === 0) throw new EditError(msg`There is no DataType named '${name}'.`);
   return (matches.find(n => !n.id.startsWith('http://opcfoundation.org/UA/|')) ?? matches[0]).id;
 }

@@ -38,6 +38,9 @@ commit named in `.github/workflows/ci.yml`.
 On a page of its own the modeler keeps unsaved work in the browser
 (IndexedDB) and offers it at the next start; embedded in a host it does not.
 
+The interface is English or German, as the browser's language says; texts
+are keyed by their English in `src/ui/de.ts`.
+
 ## Third-party content
 
 `assets/nodesets/` holds the OPC UA base NodeSet (1.05.07) and the OPC UA for

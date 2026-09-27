@@ -9,6 +9,8 @@
 // id (Web Locks) for as long as it lives. A page that goes away writes a draft
 // still waiting at once, as far as the browser lets it finish.
 
+import { t } from './i18n';
+
 export interface Draft {
   /** The page that kept it. */
   id: string;
@@ -161,6 +163,6 @@ export class Backup {
   private fail(e: unknown): void {
     if (this.failed) return;
     this.failed = true;
-    this.options.onFailure?.(`The browser keeps no backup of the model: ${e instanceof Error ? e.message : String(e)}`);
+    this.options.onFailure?.(t('The browser keeps no backup of the model: {0}', e instanceof Error ? e.message : String(e)));
   }
 }

@@ -3,6 +3,7 @@
 // and says what is wrong without closing.
 
 import { useEffect, useRef, useState } from 'react';
+import { t } from './i18n';
 
 export interface Ask {
   title: string;
@@ -22,7 +23,7 @@ export function AskDialog({ ask, onClose }: { ask: Ask; onClose: () => void }) {
 
   const ok = () => {
     const text = value.trim();
-    if (!text) { setProblem('Enter a name.'); return; }
+    if (!text) { setProblem(t('Enter a name.')); return; }
     const message = ask.check?.(text);
     if (message) { setProblem(message); return; }
     onClose();
@@ -45,7 +46,7 @@ export function AskDialog({ ask, onClose }: { ask: Ask; onClose: () => void }) {
         {problem && <div className="ask-problem" role="alert">{problem}</div>}
         <div className="ask-buttons">
           <button className="primary" onClick={ok}>OK</button>
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={onClose}>{t('Cancel')}</button>
         </div>
       </div>
     </div>

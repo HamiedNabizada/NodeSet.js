@@ -13,6 +13,7 @@
 // Fields that allow subtypes carry the concrete type in the value itself
 // (an ExtensionObject); a structure with such a field is not edited here.
 
+import { msg } from './message';
 import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { AddressSpace } from './address-space';
 import { DefinitionField, ExtensionObjectValue, UA_NAMESPACE, UaNode, uaKey } from './model';
@@ -136,7 +137,7 @@ function enumValues(space: AddressSpace, key: string): { name: string; value: nu
 
 function shapeOf(space: AddressSpace, key: string): StructShape {
   const s = structShape(space, key);
-  if (!s) throw new ValueError(`Values of ${space.get(key)?.browseName.name ?? key} are not edited here.`);
+  if (!s) throw new ValueError(msg`Values of ${space.get(key)?.browseName.name ?? key} are not edited here.`);
   return s;
 }
 
@@ -246,7 +247,7 @@ export function encodeStructure(space: AddressSpace, key: string, value: StructV
     const v = value[f.name];
     if (v === undefined) {
       if (f.optional) continue;
-      throw new ValueError(`The field '${path}${f.name}' needs a value.`);
+      throw new ValueError(msg`The field '${path}${f.name}' needs a value.`);
     }
     parts.push(encodeField(space, f, v, path));
   }
@@ -260,7 +261,7 @@ function encodeField(space: AddressSpace, f: FieldShape, v: FieldValue, path: st
     case 'builtIn': {
       const text = String(v).trim();
       if (f.array) return wrap(text.split(';').map(s => s.trim()).filter(s => s !== '').map(s => scalar(f.builtIn!, s, here)).join(''));
-      if (text === '' && f.builtIn !== 'String' && f.builtIn !== 'LocalizedText') throw new ValueError(`The field '${here}' needs a value.`);
+      if (text === '' && f.builtIn !== 'String' && f.builtIn !== 'LocalizedText') throw new ValueError(msg`The field '${here}' needs a value.`);
       return wrap(/^<[^>]+>([\s\S]*)<\/[^>]+>$/.exec(scalar(f.builtIn!, text, here))![1]);
     }
     case 'enum': {
@@ -268,7 +269,7 @@ function encodeField(space: AddressSpace, f: FieldShape, v: FieldValue, path: st
       const names = f.array ? (v as string[]) : [v as string];
       const encoded = names.map(n => {
         const found = f.enumValues!.find(e => e.name === n);
-        if (!found) throw new ValueError(`'${n}' is no value of '${here}'.`);
+        if (!found) throw new ValueError(msg`'${n}' is no value of '${here}'.`);
         return `${found.name}_${found.value}`;
       });
       return f.array ? wrap(encoded.map(e => `<${element}>${e}</${element}>`).join('')) : wrap(encoded[0]);
@@ -285,7 +286,7 @@ function scalar(builtIn: string, text: string, field: string): string {
   try {
     return element(builtIn, text);
   } catch (e) {
-    if (e instanceof ValueError) throw new ValueError(`${field}: ${e.message}`);
+    if (e instanceof ValueError) throw new ValueError(msg`${field}: ${e}`);
     throw e;
   }
 }
@@ -313,7 +314,7 @@ export function structureValues(space: AddressSpace, node: UaNode, shape: Struct
 
 /** The ExtensionObjects of structure values, with the DataType's "Default XML" encoding as TypeId. */
 export function structureObjects(space: AddressSpace, shape: StructShape, items: StructValue[]): ExtensionObjectValue[] {
-  if (!shape.encoding) throw new ValueError(`${shape.element} has no "Default XML" encoding.`);
+  if (!shape.encoding) throw new ValueError(msg`${shape.element} has no "Default XML" encoding.`);
   return items.map((v, i) => ({
     typeId: shape.encoding!,
     bodyXml: encodeStructure(space, shape.key, v, undefined, items.length > 1 ? `[${i}].` : ''),

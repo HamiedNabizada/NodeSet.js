@@ -8,6 +8,12 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- The interface in German, following the language of the browser (inside the
+  AutomationML Editor plugin the language of Windows); OPC UA terms stay as the
+  specification names them. The messages of the core (EditError, findings,
+  errors of a NodeSet file) stay English for scripts and carry a template the
+  interface translates. A test sees to it that every text has a German entry
+  and no entry is left over.
 - An instance can go below a node of a loaded model, as companion
   specifications put their devices into DI's DeviceSet: the panel offers the
   Objects folder, what loaded models place there and the model's own

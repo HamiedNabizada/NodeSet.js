@@ -3,9 +3,10 @@
 // error, and whatever was not saved is gone with it.
 
 import { Component, ReactNode } from 'react';
+import { t } from './i18n';
 
 interface Props {
-  /** What the part is called in the message. */
+  /** What the part is called in the message, with its article: "The node editor". */
   name: string;
   /** A new value shows the part again, as when another node is selected. */
   resetKey?: unknown;
@@ -34,9 +35,9 @@ export class Guard extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="guard" role="alert">
-        <div>The {this.props.name} stopped: {error.message}</div>
+        <div>{t('{0} stopped: {1}', this.props.name, error.message)}</div>
         <div className="row">
-          <button onClick={() => this.setState({ error: undefined })}>Try again</button>
+          <button onClick={() => this.setState({ error: undefined })}>{t('Try again')}</button>
           {this.props.actions?.()}
         </div>
       </div>

@@ -2,12 +2,13 @@
 // aliases are resolved against the file's own namespace table, so the result
 // no longer depends on indexes.
 
+import { MessageError, msg } from './message';
 import { DOMParser, Element as XmlElement, XMLSerializer } from '@xmldom/xmldom';
 import {
   Argument, DataTypeDefinition, LocalizedText, ModelInfo, NodeClass, NodeSetFile, NODE_CLASSES, QualifiedName, Reference, UA_NAMESPACE, UaNode,
 } from './model';
 
-export class NodeSetFormatError extends Error {}
+export class NodeSetFormatError extends MessageError {}
 
 const NAMED_NODE_ATTRIBUTES = new Set([
   'NodeId', 'BrowseName', 'SymbolicName', 'ParentNodeId', 'IsAbstract', 'Symmetric',
@@ -26,7 +27,7 @@ export function readNodeSet(xml: string): NodeSetFile {
     .parseFromString(xml, 'text/xml');
   const root = doc.documentElement;
   if (!root || root.localName !== 'UANodeSet') {
-    throw new NodeSetFormatError(errors[0] ?? 'Not a NodeSet2 file: the root element is not UANodeSet.');
+    throw new NodeSetFormatError(errors[0] ?? msg`Not a NodeSet2 file: the root element is not UANodeSet.`);
   }
 
   const namespaceUris = children(root, 'NamespaceUris').flatMap(n => children(n, 'Uri')).map(u => nameOf(u));
@@ -34,7 +35,7 @@ export function readNodeSet(xml: string): NodeSetFile {
   const table = [UA_NAMESPACE, ...namespaceUris];
 
   const resolveIndex = (index: number): string => {
-    if (index < 0 || index >= table.length) throw new NodeSetFormatError(`Namespace index ${index} is not in the namespace table.`);
+    if (index < 0 || index >= table.length) throw new NodeSetFormatError(msg`Namespace index ${index} is not in the namespace table.`);
     return table[index];
   };
 
@@ -94,7 +95,7 @@ function readNode(
   resolveIndex: (i: number) => string, serializer: XMLSerializer,
 ): UaNode {
   const id = resolve(e.getAttribute('NodeId'));
-  if (!id) throw new NodeSetFormatError(`A ${e.localName} has no NodeId.`);
+  if (!id) throw new NodeSetFormatError(msg`A ${e.localName} has no NodeId.`);
   const references: Reference[] = children(e, 'References').flatMap(r => children(r, 'Reference')).map(r => ({
     type: resolve(r.getAttribute('ReferenceType')) ?? '',
     isForward: isTrue(r.getAttribute('IsForward') ?? 'true'),
@@ -225,7 +226,7 @@ export function parseNodeIdText(raw: string, resolveIndex: (i: number) => string
     uri = nsu[1];
     rest = nsu[2];
   }
-  if (!/^[isgb]=/.test(rest)) throw new NodeSetFormatError(`'${raw}' is not a NodeId.`);
+  if (!/^[isgb]=/.test(rest)) throw new NodeSetFormatError(msg`'${raw}' is not a NodeId.`);
   return `${uri}|${rest}`;
 }
 

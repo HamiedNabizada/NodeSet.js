@@ -26,7 +26,7 @@ describe('A guarded part of the modeler', () => {
   const button = (text: string) => Array.from(host.querySelectorAll('button')).find(b => b.textContent === text);
 
   it('says what went wrong instead of taking the page with it', () => {
-    render(<div><h1>toolbar</h1><Guard name="node editor"><Part /></Guard></div>);
+    render(<div><h1>toolbar</h1><Guard name="The node editor"><Part /></Guard></div>);
     expect(host.querySelector('h1')?.textContent).toBe('toolbar');
     expect(host.querySelector('[role=alert]')?.textContent).toContain('The node editor stopped: the node has no BrowseName');
   });

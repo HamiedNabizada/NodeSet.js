@@ -11,6 +11,7 @@ import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
 import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
+import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
 import { NodeEditor } from './NodeEditor';
@@ -124,11 +125,11 @@ export function App() {
   const rescue = () => {
     const workspace = kept.current.workspace;
     if (!workspace?.editable) return null;
-    return <button onClick={() => saveModel(workspace, host)}>Save NodeSet</button>;
+    return <button onClick={() => saveModel(workspace, host)}>{t('Save NodeSet')}</button>;
   };
 
   return (
-    <Guard name="modeler" actions={rescue}>
+    <Guard name={t('The modeler')} actions={rescue}>
       <Modeler kept={kept} host={host} onDirty={setDirty} backup={backup} inbox={inbox} />
     </Guard>
   );
@@ -148,8 +149,8 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const [workspace, setWorkspace] = useState<Workspace | undefined>(kept.current.workspace);
   const [revision, setRevision] = useState(0);
   const [status, setStatus] = useState<Status>(kept.current.workspace
-    ? { text: 'The modeler was started again after an error; the model is as it was.', warn: true }
-    : { text: 'Start a new model, open a NodeSet2 file, or open the DI sample.' });
+    ? { text: t('The modeler was started again after an error; the model is as it was.'), warn: true }
+    : { text: t('Start a new model, open a NodeSet2 file, or open the DI sample.') });
   const [filter, setFilter] = useState('');
   const [shown, setShown] = useState<string>();
   const [selected, setSelected] = useState<string>();
@@ -180,7 +181,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
 
   /** Opens or starts a model; false when that failed, which the status line then says. */
   const start = useCallback(async (action: (ws: Workspace) => Promise<unknown>, name: string, required: string[] = []) => {
-    setStatus({ text: `Reading ${name} …` });
+    setStatus({ text: t('Reading {0} …', name) });
     try {
       const ws = new Workspace();
       await action(ws);
@@ -195,18 +196,18 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       bump();
       const file = ws.editable!;
       setStatus(missing.length > 0
-        ? { text: `${name}: missing required models: ${missing.join(', ')}.`, warn: true }
-        : { text: `${name}: ${file.nodes.length} nodes of ${file.models.map(m => m.modelUri).join(', ')}.` });
+        ? { text: t('{0}: missing required models: {1}.', name, missing.join(', ')), warn: true }
+        : { text: t('{0}: {1}', name, t('{0} nodes of {1}.', file.nodes.length, file.models.map(m => m.modelUri).join(', '))) });
       return true;
     } catch (e) {
-      setStatus({ text: `${name}: ${(e as Error).message}`, warn: true });
+      setStatus({ text: t('{0}: {1}', name, translate(e as Error)), warn: true });
       return false;
     }
   }, [bump, kept]);
 
   /** True when nothing unsaved would be lost, or the user agrees to lose it. */
   const mayDiscard = useCallback(
-    () => (!dirty || window.confirm('The model has changes that are not saved. Discard them?')) && mayLeaveDrafts(),
+    () => (!dirty || window.confirm(t('The model has changes that are not saved. Discard them?'))) && mayLeaveDrafts(),
     [dirty]);
 
   const openFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,9 +254,9 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     try {
       action();
       changed();
-      setStatus({ text: 'Changed. Save to keep the NodeSet.' });
+      setStatus({ text: t('Changed. Save to keep the NodeSet.') });
     } catch (e) {
-      if (e instanceof EditError) setStatus({ text: e.message, warn: true });
+      if (e instanceof EditError) setStatus({ text: translate(e), warn: true });
       else throw e;
     }
   }, [changed]);
@@ -285,7 +286,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const apply = useCallback(() => {
     if (!host || !workspace?.editable || !mayLeaveDrafts()) return;
     host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '' });
-    setStatus({ text: 'Applying to the document …' });
+    setStatus({ text: t('Applying to the document …') });
   }, [host, workspace]);
 
   // Messages from the host, through App; one that came while the modeler had failed comes first.
@@ -345,7 +346,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     const name = saveModel(workspace, host);
     if (host) return;
     setDirty(false);
-    setStatus({ text: `Saved ${name}.` });
+    setStatus({ text: t('Saved {0}.', name) });
   }, [workspace, host]);
 
   // Undo and redo from the keyboard, except while typing.
@@ -367,7 +368,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       isOwn: key => workspace.editor?.owns(key) ?? false,
       canHoldChildren: key => ['ObjectType', 'VariableType', 'Object', 'Variable'].includes(workspace.space.get(key)?.nodeClass ?? ''),
       addChild: (key, kind) => setAsk({
-        title: `Name of the new ${kind}`,
+        title: t('Name of the new {0}', kind),
         onOk: name => runRef.current(() => {
           const parent = workspace.space.get(key)!;
           const declaration = parent.nodeClass.endsWith('Type') || insideType(workspace.space, parent);
@@ -375,10 +376,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         }),
       }),
       addReference: (source, target) => setAsk({
-        title: 'ReferenceType of the new reference',
+        title: t('ReferenceType of the new reference'),
         value: lastReferenceType.current,
         options: referenceTypeNames(workspace),
-        check: name => (findReferenceType(workspace, name) ? undefined : `There is no ReferenceType named '${name}'.`),
+        check: name => (findReferenceType(workspace, name) ? undefined : t("There is no ReferenceType named '{0}'.", name)),
         onOk: name => {
           lastReferenceType.current = name;
           runRef.current(() => workspace.editor!.addReference(source, findReferenceType(workspace, name)!, target));
@@ -416,7 +417,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     if (fittedFor.current !== shown) {
       modeler.fit();
       fittedFor.current = shown;
-      if (d.truncated) setStatus({ text: 'Deeper declarations are left out; double-click a node to open its type.' });
+      if (d.truncated) setStatus({ text: t('Deeper declarations are left out; double-click a node to open its type.') });
     }
     modeler.select(selectedRef.current);
   }, [shown, workspace, revision]);
@@ -455,7 +456,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
     if (!workspace?.editor) return;
     setAsk({
-      title: `Name of the new ${nodeClass}`,
+      title: t('Name of the new {0}', nodeClass),
       onOk: name => run(() => {
         const key = workspace.editor!.addType(nodeClass, name);
         setShown(key);
@@ -467,7 +468,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const addStateMachine = () => {
     if (!workspace?.editor) return;
     setAsk({
-      title: 'Name of the new state machine type',
+      title: t('Name of the new state machine type'),
       onOk: name => run(() => {
         const key = workspace.editor!.addStateMachineType(name);
         setShown(key);
@@ -492,50 +493,50 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         {!host && <span className="title">NodeSet.js</span>}
         {/* Inside the plugin, its own toolbar opens and starts models: they need its NodeSet folders. */}
         {host ? null : newModelUri === undefined
-          ? <button onClick={() => setNewModelUri('http://example.org/MyModel/')}>New model…</button>
+          ? <button onClick={() => setNewModelUri('http://example.org/MyModel/')}>{t('New model…')}</button>
           : (
             <span className="inline-form">
               <input autoFocus size={36} value={newModelUri} onChange={e => setNewModelUri(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') createModel(); if (e.key === 'Escape') setNewModelUri(undefined); }} />
-              <button onClick={createModel}>Create</button>
-              <button onClick={() => setNewModelUri(undefined)}>Cancel</button>
+              <button onClick={createModel}>{t('Create')}</button>
+              <button onClick={() => setNewModelUri(undefined)}>{t('Cancel')}</button>
             </span>
           )}
-        {!host && <label className="button">Open NodeSet…<input type="file" accept=".xml" onChange={openFile} /></label>}
-        {!host && <button onClick={openSample}>Open DI sample</button>}
-        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>Apply to document</button>}
-        <button onClick={save} disabled={!workspace?.editable}>Save NodeSet{dirty ? ' *' : ''}</button>
+        {!host && <label className="button">{t('Open NodeSet…')}<input type="file" accept=".xml" onChange={openFile} /></label>}
+        {!host && <button onClick={openSample}>{t('Open DI sample')}</button>}
+        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>{t('Apply to document')}</button>}
+        <button onClick={save} disabled={!workspace?.editable}>{t('Save NodeSet')}{dirty ? ' *' : ''}</button>
         <span className="sep" />
-        <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">Undo</button>
-        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">Redo</button>
-        {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>Reset layout</button>}
-        <button disabled={!workspace?.editable} onClick={() => select(undefined)} title="Version, date and the models in use">Model</button>
+        <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">{t('Undo')}</button>
+        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">{t('Redo')}</button>
+        {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>{t('Reset layout')}</button>}
+        <button disabled={!workspace?.editable} onClick={() => select(undefined)} title={t('Version, date and the models in use')}>{t('Model')}</button>
         <span className="sep" />
         <button className={errors > 0 || checked.error ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
-          {checked.error ? 'Checks failed' : `Checks: ${errors} error(s), ${findings.length - errors} warning(s)`}
+          {checked.error ? t('Checks failed') : t('Checks: {0} error(s), {1} warning(s)', errors, findings.length - errors)}
         </button>
         <label style={{ marginLeft: 'auto', fontSize: 13 }}>
-          <input type="checkbox" checked={showExternal} onChange={e => setShowExternal(e.target.checked)} /> Types of required models
+          <input type="checkbox" checked={showExternal} onChange={e => setShowExternal(e.target.checked)} /> {t('Types of required models')}
         </label>
       </div>
       {offer && (
         <div className="offer" role="status">
-          <span>An unsaved model from {new Date(offer.savedAt).toLocaleString()} is kept in this browser: <span className="mono">{offer.title}</span></span>
-          <button onClick={() => restore(offer)}>Restore</button>
-          <button onClick={() => discard(offer)}>Discard</button>
+          <span>{t('An unsaved model from {0} is kept in this browser:', new Date(offer.savedAt).toLocaleString())} <span className="mono">{offer.title}</span></span>
+          <button onClick={() => restore(offer)}>{t('Restore')}</button>
+          <button onClick={() => discard(offer)}>{t('Discard')}</button>
         </div>
       )}
       <div className="main">
         <div className="side">
-          <input className="filter" placeholder="Filter types" value={filter} onChange={e => setFilter(e.target.value)} />
+          <input className="filter" placeholder={t('Filter types')} value={filter} onChange={e => setFilter(e.target.value)} />
           {types.map(g => (
             <div key={g.nodeClass}>
               <div className="group">
                 {g.title} ({g.nodes.length})
                 {editor && g.nodeClass === 'ObjectType' && (
-                  <button className="add-type" title="New state machine type (OPC 10000-5 Annex B)" onClick={addStateMachine}>+ machine</button>
+                  <button className="add-type" title={t('New state machine type (OPC 10000-5 Annex B)')} onClick={addStateMachine}>{t('+ machine')}</button>
                 )}
-                {editor && <button className="add-type" title={`New ${g.nodeClass}`} onClick={() => addType(g.nodeClass)}>+</button>}
+                {editor && <button className="add-type" title={t('New {0}', g.nodeClass)} onClick={() => addType(g.nodeClass)}>+</button>}
               </div>
               {g.nodes.map(n => (
                 <div
@@ -552,7 +553,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
           ))}
           {workspace && (
             <div>
-              <div className="group">Instances ({instances.length})</div>
+              <div className="group">{t('Instances')} ({instances.length})</div>
               {instances.map(n => (
                 <div key={n.id} className={`item${n.id === shown ? ' active' : ''}`} title={n.id} role="button" tabIndex={0}
                   onClick={() => select(n.id, n.id)} onKeyDown={e => onActivate(e, () => select(n.id, n.id))}>
@@ -561,33 +562,33 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
               ))}
             </div>
           )}
-          {!workspace && <div className="empty">No model open.</div>}
+          {!workspace && <div className="empty">{t('No model open.')}</div>}
         </div>
         <div className="canvas">
           <div ref={canvasRef} />
-          {workspace && !shown && <div className="hint">Pick a type on the left, or add one with +.</div>}
+          {workspace && !shown && <div className="hint">{t('Pick a type on the left, or add one with +.')}</div>}
         </div>
         <div className="side right">
-          <Guard name="node editor" resetKey={selected}>
+          <Guard name={t('The node editor')} resetKey={selected}>
             {workspace && editor && selected && workspace.space.get(selected)
               ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
                   onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
                   onInstance={key => select(key, key)} />
               : workspace?.editable
                 ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
-                : <div className="empty">Select a node.</div>}
+                : <div className="empty">{t('Select a node.')}</div>}
           </Guard>
         </div>
       </div>
       {showFindings && (
-        <Guard name="list of findings" resetKey={revision}>
+        <Guard name={t('The list of findings')} resetKey={revision}>
           <div className="findings">
             {checked.error && <div className="finding error" role="alert">{checked.error}</div>}
-            {!checked.error && findings.length === 0 && <div className="empty">No findings.</div>}
+            {!checked.error && findings.length === 0 && <div className="empty">{t('No findings.')}</div>}
             {findings.map((f, i) => (
               <div key={i} className={`finding ${f.severity}`} role="button" tabIndex={0}
                 onClick={() => goTo(f)} onKeyDown={e => onActivate(e, () => goTo(f))}>
-                <span className="severity">{f.severity}</span> <span className="rule" title={RULES[f.rule]}>{f.rule}</span> {f.message}
+                <span className="severity">{f.severity === 'error' ? t('error') : t('warning')}</span> <span className="rule" title={t(RULES[f.rule])}>{f.rule}</span> {translate(f)}
               </div>
             ))}
           </div>

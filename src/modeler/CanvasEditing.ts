@@ -8,6 +8,7 @@ import ConnectModule from 'diagram-js/lib/features/connect';
 import RulesModule from 'diagram-js/lib/features/rules';
 import RuleProvider from 'diagram-js/lib/features/rules/RuleProvider';
 import type { DeclarationKind } from '../nodeset/edit';
+import { t } from '../ui/i18n';
 
 /** What the canvas can ask the application to do, by node key. */
 export interface CanvasActions {
@@ -23,11 +24,11 @@ export interface CanvasActions {
 type Shape = { businessObject?: { nodeKey?: string } };
 const keyOf = (e: Shape | undefined) => e?.businessObject?.nodeKey;
 
-const CHILDREN: [DeclarationKind, string, string][] = [
-  ['Variable', 'V', 'Add a variable (HasComponent)'],
-  ['Property', 'P', 'Add a property (HasProperty)'],
-  ['Object', 'O', 'Add an object (HasComponent)'],
-  ['Method', 'M', 'Add a method (HasComponent)'],
+const CHILDREN: [DeclarationKind, string, () => string][] = [
+  ['Variable', 'V', () => t('Add a variable (HasComponent)')],
+  ['Property', 'P', () => t('Add a property (HasProperty)')],
+  ['Object', 'O', () => t('Add an object (HasComponent)')],
+  ['Method', 'M', () => t('Add a method (HasComponent)')],
 ];
 
 class UaContextPadProvider {
@@ -47,7 +48,7 @@ class UaContextPadProvider {
         entries[`add-${kind}`] = {
           group: 'add',
           html: `<div class="entry ua-pad" draggable="true">${glyph}</div>`,
-          title,
+          title: title(),
           action: { click: () => this.actions.addChild(key, kind) },
         };
       }
@@ -55,7 +56,7 @@ class UaContextPadProvider {
     entries.reference = {
       group: 'connect',
       html: '<div class="entry ua-pad" draggable="true">→</div>',
-      title: 'Draw a reference to another node',
+      title: t('Draw a reference to another node'),
       action: {
         click: (event: Event, target: unknown) => this.connect.start(event, target),
         dragstart: (event: Event, target: unknown) => this.connect.start(event, target),
@@ -64,7 +65,7 @@ class UaContextPadProvider {
     entries.delete = {
       group: 'edit',
       html: '<div class="entry ua-pad" draggable="true">×</div>',
-      title: 'Delete the node and what it holds',
+      title: t('Delete the node and what it holds'),
       action: { click: () => this.actions.remove(key) },
     };
     return entries;

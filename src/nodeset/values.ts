@@ -3,6 +3,7 @@
 // and single structures whose fields are such values. Other structured
 // values (ExtensionObjects) are left as they were read.
 
+import { Message, MessageError, msg } from './message';
 import { DOMParser, Element as XmlElement } from '@xmldom/xmldom';
 import { AddressSpace } from './address-space';
 import { ExtensionObjectValue, UA_NAMESPACE, UaNode, uaKey } from './model';
@@ -21,7 +22,8 @@ const INTEGER_RANGES: Record<string, [bigint, bigint]> = {
   Int64: [-9223372036854775808n, 9223372036854775807n], UInt64: [0n, 18446744073709551615n],
 };
 
-export class ValueError extends Error {}
+/** A value the panel cannot write; its message is English, its template translatable. */
+export class ValueError extends MessageError {}
 
 /** The built-in type a DataType is encoded as, following its supertypes; enumerations are Int32. */
 export function builtInOf(space: AddressSpace, dataType: string | undefined): string | undefined {
@@ -87,9 +89,9 @@ function matrixText(inner: string, builtIn: string): string | null {
  */
 export function matrixXml(builtIn: string, text: string): string {
   const rows = text.split('|').map(r => r.split(';').map(c => c.trim()).filter(c => c !== '')).filter(r => r.length > 0);
-  if (rows.length === 0) throw new ValueError('A matrix needs at least one row.');
+  if (rows.length === 0) throw new ValueError(msg`A matrix needs at least one row.`);
   const width = rows[0].length;
-  if (rows.some(r => r.length !== width)) throw new ValueError(`Every row of the matrix needs ${width} element(s), as the first has.`);
+  if (rows.some(r => r.length !== width)) throw new ValueError(msg`Every row of the matrix needs ${width} element(s), as the first has.`);
   const cells = rows.flat().map(c => element(builtIn, c)).join('');
   return `<Matrix xmlns="${TYPES_NS}"><Dimensions><Int32>${rows.length}</Int32><Int32>${width}</Int32></Dimensions><Value>${cells}</Value></Matrix>`;
 }
@@ -166,7 +168,7 @@ export function structureValue(shape: StructureShape, values: Record<string, str
       const parts = text.split(';').map(s => s.trim()).filter(s => s !== '');
       return `<${f.name}>${parts.map(p => element(f.builtIn, p)).join('')}</${f.name}>`;
     }
-    if (text === '' && f.builtIn !== 'String' && f.builtIn !== 'LocalizedText') throw new ValueError(`The field '${f.name}' needs a value.`);
+    if (text === '' && f.builtIn !== 'String' && f.builtIn !== 'LocalizedText') throw new ValueError(msg`The field '${f.name}' needs a value.`);
     const inner = /^<[^>]+>([\s\S]*)<\/[^>]+>$/.exec(element(f.builtIn, text))![1];
     return `<${f.name}>${inner}</${f.name}>`;
   });
@@ -187,27 +189,27 @@ export function scalarText(e: XmlElement, builtIn: string): string {
 
 /** A scalar of a built-in type as its XML element; throws ValueError for text that is not of the type. */
 export function element(builtIn: string, text: string): string {
-  const fail = (what: string) => { throw new ValueError(`'${text}' is not ${what}.`); };
+  const fail = (message: Message) => { throw new ValueError(message); };
   let content = text;
   if (builtIn === 'Boolean') {
-    if (!/^(true|false)$/i.test(text)) fail('true or false');
+    if (!/^(true|false)$/i.test(text)) fail(msg`'${text}' is not true or false.`);
     content = text.toLowerCase();
   } else if (builtIn in INTEGER_RANGES) {
-    if (!/^[+-]?\d+$/.test(text)) fail(`an integer (${builtIn})`);
+    if (!/^[+-]?\d+$/.test(text)) fail(msg`'${text}' is not an integer (${builtIn}).`);
     const [min, max] = INTEGER_RANGES[builtIn];
     const v = BigInt(text);
-    if (v < min || v > max) fail(`within the range of ${builtIn}`);
+    if (v < min || v > max) fail(msg`'${text}' is not within the range of ${builtIn}.`);
     content = v.toString();
   } else if (builtIn === 'Float' || builtIn === 'Double') {
-    if (text === '' || Number.isNaN(Number(text))) fail('a number');
+    if (text === '' || Number.isNaN(Number(text))) fail(msg`'${text}' is not a number.`);
   } else if (builtIn === 'DateTime') {
     const d = new Date(text);
-    if (Number.isNaN(d.getTime())) fail('a date and time');
+    if (Number.isNaN(d.getTime())) fail(msg`'${text}' is not a date and time.`);
     content = d.toISOString();
   } else if (builtIn === 'Guid') {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) fail('a GUID');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) fail(msg`'${text}' is not a GUID.`);
   } else if (builtIn === 'ByteString') {
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) fail('Base64');
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(text)) fail(msg`'${text}' is not Base64.`);
   }
   if (builtIn === 'LocalizedText') return `<LocalizedText><Text>${escape(content)}</Text></LocalizedText>`;
   if (builtIn === 'Guid') return `<Guid><String>${escape(content)}</String></Guid>`;

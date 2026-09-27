@@ -1,6 +1,7 @@
 // Checks on the model being edited, following OPC 10000-3. Findings are
 // advice while editing; nothing prevents saving a model with findings.
 
+import { Argument, Message, msg } from './message';
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { isStateMachineType, readStateMachine } from './statemachine';
 import { NodeSetFile, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from './model';
@@ -11,7 +12,11 @@ export interface Finding {
   rule: string;
   severity: Severity;
   node: string;
+  /** In English. */
   message: string;
+  /** The message as a template with its values, for an interface to translate. */
+  template?: string;
+  args?: readonly Argument[];
 }
 
 export const RULES: Record<string, string> = {
@@ -46,13 +51,15 @@ const ROOT_TYPES = new Set(['BaseObjectType', 'BaseVariableType', 'BaseDataType'
 
 export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
   const findings: Finding[] = [];
-  const add = (rule: string, severity: Severity, node: UaNode, detail: string) =>
-    findings.push({ rule, severity, node: node.id, message: `${label(node)}: ${detail}` });
+  const add = (rule: string, severity: Severity, node: UaNode, detail: Message) => {
+    const message = msg`${label(node)}: ${detail}`;
+    findings.push({ rule, severity, node: node.id, message: String(message), template: message.template, args: message.args });
+  };
 
   for (const n of file.nodes) {
     for (const r of n.references) {
-      if (!space.get(r.target)) add('M001', 'error', n, `the target ${r.target} of a reference is unknown.`);
-      if (!space.get(r.type)) add('M001', 'error', n, `the reference type ${r.type} is unknown.`);
+      if (!space.get(r.target)) add('M001', 'error', n, msg`the target ${r.target} of a reference is unknown.`);
+      if (!space.get(r.type)) add('M001', 'error', n, msg`the reference type ${r.type} is unknown.`);
     }
 
     // A BrowseName is unique with its namespace, not without it: a type may
@@ -66,18 +73,18 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
         names.set(key, (names.get(key) ?? 0) + 1);
       }
       for (const [key, count] of names) {
-        if (count > 1) add('M002', 'error', n, `${count} children are named '${key.split('|')[1]}'.`);
+        if (count > 1) add('M002', 'error', n, msg`${count} children are named '${key.split('|')[1]}'.`);
       }
     }
 
     if ((n.nodeClass === 'Object' || n.nodeClass === 'Variable') && !space.typeDefinition(n)) {
-      add('M003', 'error', n, 'it has no TypeDefinition.');
+      add('M003', 'error', n, msg`it has no TypeDefinition.`);
     }
     if ((n.nodeClass === 'Variable' || n.nodeClass === 'VariableType') && !n.dataType) {
-      add('M004', 'warning', n, 'it has no DataType; BaseDataType is assumed.');
+      add('M004', 'warning', n, msg`it has no DataType; BaseDataType is assumed.`);
     }
     if (TYPE_CLASSES.has(n.nodeClass) && !space.supertypeKey(n.id) && !ROOT_TYPES.has(n.browseName.name)) {
-      add('M005', 'error', n, 'it has no supertype.');
+      add('M005', 'error', n, msg`it has no supertype.`);
     }
 
     // The available states and transitions of a machine type carry no
@@ -89,28 +96,28 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     const rule = space.modellingRule(n);
     if (!TYPE_CLASSES.has(n.nodeClass) && !rule && !partOfMachine && !STANDARD_PROPERTIES.has(n.browseName.name)
         && insideType(space, n)) {
-      add('M006', 'warning', n, 'it is part of a type but has no ModellingRule, so instances will not get it.');
+      add('M006', 'warning', n, msg`it is part of a type but has no ModellingRule, so instances will not get it.`);
     }
     const typeDefinition = space.typeDefinition(n);
     if (!rule && !insideType(space, n) && typeDefinition?.isAbstract) {
-      add('M007', 'error', n, `its type ${label(typeDefinition)} is abstract.`);
+      add('M007', 'error', n, msg`its type ${label(typeDefinition)} is abstract.`);
     }
 
     if (n.nodeClass === 'ReferenceType' && !n.symmetric && text(n.inverseName) === '') {
-      add('M008', 'warning', n, 'it has no InverseName.');
+      add('M008', 'warning', n, msg`it has no InverseName.`);
     }
     if (n.nodeClass === 'DataType' && !n.isAbstract && space.isSubtypeOf(n.id, uaKey(22))
       && !space.out(n.id, uaKey(38), false)
         .some(e => space.get(e.target)?.browseName.name === 'Default Binary'
                    || space.get(e.target)?.browseName.name === 'Default XML')) {
-      add('M010', 'warning', n, 'it has neither a "Default Binary" nor a "Default XML" encoding.');
+      add('M010', 'warning', n, msg`it has neither a "Default Binary" nor a "Default XML" encoding.`);
     }
     // A definition holds the fields a type adds; the ones it inherits stay
     // where they were declared, so a structure with an empty definition is
     // only empty when no supertype of it has fields either.
     if (n.nodeClass === 'DataType' && !n.isAbstract && (space.isSubtypeOf(n.id, uaKey(22)) || space.isSubtypeOf(n.id, uaKey(29)))
       && !inheritedFields(space, n)) {
-      add('M011', 'warning', n, 'it and the types it derives from have no fields.');
+      add('M011', 'warning', n, msg`it and the types it derives from have no fields.`);
     }
     // The model owns what its Models section declares. The namespace table
     // does not say it: the base model has no table at all, and every one of
@@ -119,20 +126,20 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       ? file.models.map(m => m.modelUri)
       : file.namespaceUris;
     if (!owned.includes(parseNodeIdKey(n.id).namespaceUri)) {
-      add('M012', 'error', n, `its NodeId is in ${parseNodeIdKey(n.id).namespaceUri}, which the model does not own.`);
+      add('M012', 'error', n, msg`its NodeId is in ${parseNodeIdKey(n.id).namespaceUri}, which the model does not own.`);
     }
 
     const rank = n.valueRank ?? -1;
     const dimensions = (n.arrayDimensions ?? '').split(',').map(d => d.trim()).filter(d => d !== '');
     if (dimensions.length > 0 && rank < 1) {
-      add('M013', 'error', n, `it has ArrayDimensions but ValueRank ${rank}.`);
+      add('M013', 'error', n, msg`it has ArrayDimensions but ValueRank ${rank}.`);
     } else if (rank >= 1 && dimensions.length > 0 && dimensions.length !== rank) {
-      add('M013', 'error', n, `ValueRank ${rank} asks for ${rank} ArrayDimensions, not ${dimensions.length}.`);
+      add('M013', 'error', n, msg`ValueRank ${rank} asks for ${rank} ArrayDimensions, not ${dimensions.length}.`);
     }
 
     for (const a of n.arguments ?? []) {
-      if (!space.get(a.dataType)) add('M014', 'error', n, `the argument '${a.name}' names the unknown DataType ${a.dataType}.`);
-      if (a.name.trim() === '') add('M014', 'warning', n, 'an argument has no name.');
+      if (!space.get(a.dataType)) add('M014', 'error', n, msg`the argument '${a.name}' names the unknown DataType ${a.dataType}.`);
+      if (a.name.trim() === '') add('M014', 'warning', n, msg`an argument has no name.`);
     }
 
     const placeholder = rule === RULE.MandatoryPlaceholder || rule === RULE.OptionalPlaceholder;
@@ -140,43 +147,43 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     // A placeholder method keeps its name: what the instance may choose are
     // its arguments, not what it is called.
     if (placeholder && !angled && n.nodeClass !== 'Method') {
-      add('M015', 'warning', n, 'it is a placeholder but not named <like this>.');
+      add('M015', 'warning', n, msg`it is a placeholder but not named <like this>.`);
     }
-    if (!placeholder && angled && rule) add('M015', 'warning', n, 'it is named <like a placeholder> but its ModellingRule is not one.');
+    if (!placeholder && angled && rule) add('M015', 'warning', n, msg`it is named <like a placeholder> but its ModellingRule is not one.`);
 
     for (const e of space.out(n.id, REF.HasProperty, false)) {
       const target = space.get(e.target);
       if (!target) continue;
-      if (target.nodeClass !== 'Variable') add('M016', 'error', n, `'${label(target)}' is held by HasProperty but is a ${target.nodeClass}.`);
+      if (target.nodeClass !== 'Variable') add('M016', 'error', n, msg`'${label(target)}' is held by HasProperty but is a ${target.nodeClass}.`);
       else if (space.typeDefinition(target) && space.typeDefinition(target)!.browseName.name !== 'PropertyType') {
-        add('M016', 'warning', n, `'${label(target)}' is held by HasProperty but is a ${label(space.typeDefinition(target)!)}.`);
+        add('M016', 'warning', n, msg`'${label(target)}' is held by HasProperty but is a ${label(space.typeDefinition(target)!)}.`);
       }
     }
 
     const fields = n.definition?.fields ?? [];
     for (const [name, count] of countBy(fields.map(f => f.name))) {
-      if (count > 1) add('M017', 'error', n, `${count} fields are named '${name}'.`);
+      if (count > 1) add('M017', 'error', n, msg`${count} fields are named '${name}'.`);
     }
     const numbers = fields.map(f => f.value).filter((v): v is number => v !== undefined);
     if (numbers.length > 0 && space.isSubtypeOf(n.id, uaKey(29))) {
       for (const [value, count] of countBy(numbers.map(String))) {
-        if (count > 1) add('M017', 'error', n, `${count} values are ${value}.`);
+        if (count > 1) add('M017', 'error', n, msg`${count} values are ${value}.`);
       }
     }
 
     if (n.nodeClass === 'ReferenceType' && n.symmetric && text(n.inverseName) !== '') {
-      add('M018', 'error', n, 'it is symmetric, so it must have no InverseName.');
+      add('M018', 'error', n, msg`it is symmetric, so it must have no InverseName.`);
     }
 
     // Encodings and other nodes hang on references of their own kind; only a node nothing points to is lost.
     if (!TYPE_CLASSES.has(n.nodeClass) && !space.parentOf(n) && space.in(n.id).length === 0) {
-      add('M019', 'warning', n, 'no reference leads to it; it is part of no type and no hierarchy.');
+      add('M019', 'warning', n, msg`no reference leads to it; it is part of no type and no hierarchy.`);
     }
 
     if (isStateMachineType(space, n)) {
       const machine = readStateMachine(space, n);
       for (const t of machine.transitions) {
-        if (!t.from || !t.to) add('M020', 'error', n, `the transition '${t.name}' has no ${!t.from ? 'FromState' : 'ToState'}.`);
+        if (!t.from || !t.to) add('M020', 'error', n, msg`the transition '${t.name}' has no ${!t.from ? 'FromState' : 'ToState'}.`);
       }
       for (const [what, items] of [['state', machine.states], ['transition', machine.transitions]] as const) {
         const numbers = new Map<number, number>();
@@ -186,11 +193,19 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
         const numbered = items.some(i => i.number !== undefined);
         for (const i of items) {
           if (i.number === undefined) {
-            if (numbered) add('M021', 'warning', n, `the ${what} '${i.name}' has no number, while others have one.`);
+            if (numbered) {
+              add('M021', 'warning', n, what === 'state'
+                ? msg`the state '${i.name}' has no number, while others have one.`
+                : msg`the transition '${i.name}' has no number, while others have one.`);
+            }
           } else numbers.set(i.number, (numbers.get(i.number) ?? 0) + 1);
         }
         for (const [number, count] of numbers) {
-          if (count > 1) add('M021', 'error', n, `${count} ${what}s share the number ${number}.`);
+          if (count > 1) {
+            add('M021', 'error', n, what === 'state'
+              ? msg`${count} states share the number ${number}.`
+              : msg`${count} transitions share the number ${number}.`);
+          }
         }
       }
     }
@@ -206,10 +221,10 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
           const declarationRule = space.modellingRule(declaration);
           const key = `${declaration.browseName.namespaceUri}|${declaration.browseName.name}`;
           if (declarationRule === RULE.Mandatory && !children.has(key)) {
-            add('M022', 'error', n, `it has no '${declaration.browseName.name}', which ${label(type)} declares as Mandatory.`);
+            add('M022', 'error', n, msg`it has no '${declaration.browseName.name}', which ${label(type)} declares as Mandatory.`);
           }
           if (declarationRule === RULE.MandatoryPlaceholder && !filled(space, n, declaration)) {
-            add('M023', 'error', n, `nothing fills '${declaration.browseName.name}', which ${label(type)} declares as a MandatoryPlaceholder.`);
+            add('M023', 'error', n, msg`nothing fills '${declaration.browseName.name}', which ${label(type)} declares as a MandatoryPlaceholder.`);
           }
         }
       }
@@ -222,7 +237,7 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     // itself, so a foreign namespace there is a mistake.
     if (TYPE_CLASSES.has(n.nodeClass) && !n.id.startsWith(n.browseName.namespaceUri + '|')
         && n.browseName.namespaceUri !== UA_NAMESPACE) {
-      add('M009', 'warning', n, `its BrowseName is in ${n.browseName.namespaceUri}.`);
+      add('M009', 'warning', n, msg`its BrowseName is in ${n.browseName.namespaceUri}.`);
     }
   }
   return findings;

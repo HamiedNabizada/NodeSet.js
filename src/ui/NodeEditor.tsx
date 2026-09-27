@@ -11,6 +11,7 @@ import { structShape, structureValues } from '../nodeset/structures';
 import { addSignals, parseSignals } from '../nodeset/csv';
 import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
 import { isStateMachineType } from '../nodeset/statemachine';
+import { t } from './i18n';
 
 const RULES: [string, string][] = [
   ['', '(none)'],
@@ -21,7 +22,7 @@ const RULES: [string, string][] = [
 ];
 
 const VALUE_RANKS: [number, string][] = [
-  [-3, 'ScalarOrOneDimension'], [-2, 'Any'], [-1, 'Scalar'], [0, 'OneOrMoreDimensions'], [1, 'OneDimension'], [2, 'Two dimensions'],
+  [-3, 'ScalarOrOneDimension'], [-2, 'Any'], [-1, 'Scalar'], [0, 'OneOrMoreDimensions'], [1, 'OneDimension'], [2, 'TwoDimensions'],
 ];
 
 interface Props {
@@ -38,7 +39,7 @@ interface Props {
 
 export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated, onInstance }: Props) {
   const node = space.get(nodeKey);
-  if (!node) return <div className="empty">Unknown node.</div>;
+  if (!node) return <div className="empty">{t('Unknown node.')}</div>;
   const own = editor.owns(nodeKey);
   const isType = node.nodeClass.endsWith('Type');
   const id = parseNodeIdKey(node.id);
@@ -50,20 +51,20 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
     <div className="editor">
       <h3>{label(node)} <span className="kind">{node.nodeClass}</span></h3>
       {!own && <div className="note">Part of {id.namespaceUri}; read only.</div>}
-      <Field label="Name">
+      <Field label={t('Name')}>
         <TextInput value={node.browseName.name} disabled={!own} onCommit={v => run(() => editor.rename(nodeKey, v))} />
       </Field>
       <Field label="NodeId"><span className="mono">{id.identifier}</span></Field>
-      <Field label="Description">
+      <Field label={t('Description')}>
         <TextInput value={text(node.description)} disabled={!own} multiline onCommit={v => run(() => editor.setDescription(nodeKey, v))} />
       </Field>
       {isType && (
         <>
-          <Field label="Supertype">
+          <Field label={t('Supertype')}>
             <TypePicker space={space} nodeClass={node.nodeClass} value={supertype} disabled={!own}
               onPick={k => run(() => editor.setSupertype(nodeKey, k))} />
           </Field>
-          <Field label="Abstract">
+          <Field label={t('Abstract')}>
             <input type="checkbox" checked={node.isAbstract === true} disabled={!own} onChange={e => run(() => editor.setAbstract(nodeKey, e.target.checked))} />
           </Field>
         </>
@@ -72,7 +73,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
         <Field label="TypeDefinition">
           <TypePicker space={space} nodeClass={node.nodeClass === 'Object' ? 'ObjectType' : 'VariableType'} value={typeDefinition?.id} disabled={!own}
             onPick={k => run(() => editor.setTypeDefinition(nodeKey, k))} />
-          {typeDefinition && <button className="link" onClick={() => onOpenType(typeDefinition.id)}>open</button>}
+          {typeDefinition && <button className="link" onClick={() => onOpenType(typeDefinition.id)}>{t('open')}</button>}
         </Field>
       )}
       {!isType && insideType(space, node) && (
@@ -98,7 +99,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       )}
       {node.nodeClass === 'ReferenceType' && (
         <>
-          <Field label="Symmetric">
+          <Field label={t('Symmetric')}>
             <input type="checkbox" checked={node.symmetric === true} disabled={!own} onChange={e => run(() => editor.setSymmetric(nodeKey, e.target.checked))} />
           </Field>
           {!node.symmetric && (
@@ -118,8 +119,8 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       )}
       {own && canHoldChildren(node.nodeClass) && (
         <div className="row">
-          <label className="button-like" title="A CSV file with a header row: Name, and optionally DataType, Kind (Variable or Property), ModellingRule, Description, Value">
-            Variables from CSV…
+          <label className="button-like" title={t('A CSV file with a header row: Name, and optionally DataType, Kind (Variable or Property), ModellingRule, Description, Value')}>
+            {t('Variables from CSV…')}
             <input type="file" accept=".csv,.txt" onChange={async e => {
               const file = e.target.files?.[0];
               e.target.value = '';
@@ -136,8 +137,8 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       )}
       {own && (
         <div className="actions">
-          {isType && <button onClick={() => onOpenType(nodeKey)}>Show diagram</button>}
-          <button className="danger" onClick={() => run(() => editor.delete(nodeKey))}>Delete</button>
+          {isType && <button onClick={() => onOpenType(nodeKey)}>{t('Show diagram')}</button>}
+          <button className="danger" onClick={() => run(() => editor.delete(nodeKey))}>{t('Delete')}</button>
         </div>
       )}
     </div>
@@ -160,13 +161,13 @@ function ValueField({ space, editor, node, own, run }: { space: AddressSpace; ed
     return <StructureValueSection space={space} editor={editor} node={node} shape={shape} current={current} own={own} run={run} />;
   }
   const text = node.extensionObjects ? null : valueText(node, builtIn);
-  const hint = !node.dataType ? 'choose a DataType first' : 'values of this DataType are not edited here';
+  const hint = !node.dataType ? t('choose a DataType first') : t('values of this DataType are not edited here');
   return (
-    <Field label="Value">
+    <Field label={t('Value')}>
       {text === null
-        ? <span className="note">A structured value; kept as it was read.</span>
+        ? <span className="note">{t('A structured value; kept as it was read.')}</span>
         : <TextInput value={text ?? ''} disabled={!own || !builtIn}
-            placeholder={!builtIn ? hint : rank >= 2 ? 'a; b | c; d (rows separated by |)' : array ? 'a; b; c' : builtIn}
+            placeholder={!builtIn ? hint : rank >= 2 ? t('a; b | c; d (rows separated by |)') : array ? 'a; b; c' : builtIn}
             onCommit={v => run(() => editor.setValue(node.id, v))} />}
     </Field>
   );
@@ -194,7 +195,7 @@ function AddChild({ editor, parent, run, onCreated, declaration }: {
   };
   return (
     <fieldset className="add">
-      <legend>Add child</legend>
+      <legend>{t('Add child')}</legend>
       <select value={kind} onChange={e => setKind(e.target.value as DeclarationKind)}>
         <option value="Variable">Variable (HasComponent)</option>
         <option value="Property">Property (HasProperty)</option>
@@ -207,8 +208,8 @@ function AddChild({ editor, parent, run, onCreated, declaration }: {
         </select>
       )}
       <div className="row">
-        <input placeholder="Name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
-        <button onClick={add} disabled={!name.trim()}>Add</button>
+        <input placeholder={t('Name')} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
+        <button onClick={add} disabled={!name.trim()}>{t('Add')}</button>
       </div>
     </fieldset>
   );

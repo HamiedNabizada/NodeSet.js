@@ -12,10 +12,11 @@ import { Argument, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
 import { insideType } from '../nodeset/checks';
 import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
+import { t } from './i18n';
 
 type Run = (action: () => unknown) => void;
 
-const VALUE_RANKS: [number, string][] = [[-1, 'Scalar'], [1, 'Array'], [-2, 'Any'], [0, 'Array (n dims)']];
+const valueRanks = (): [number, string][] => [[-1, t('Scalar')], [1, t('Array')], [-2, t('Any')], [0, t('Array (n dims)')]];
 
 export function ArgumentsSection({ space, editor, method, run }: { space: AddressSpace; editor: ModelEditor; method: UaNode; run: Run }) {
   return (
@@ -39,21 +40,21 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
 
   return (
     <fieldset className="add">
-      <legend>{which} arguments</legend>
+      <legend>{which === 'Input' ? t('Input arguments') : t('Output arguments')}</legend>
       {draft.map((a, i) => (
         <div className="row item-row" key={i}>
-          <input placeholder="Name" value={a.name} onChange={e => update(i, { name: e.target.value })} />
+          <input placeholder={t('Name')} value={a.name} onChange={e => update(i, { name: e.target.value })} />
           <TypePicker space={space} nodeClass="DataType" value={a.dataType} onPick={k => update(i, { dataType: k })} />
           <select value={a.valueRank} onChange={e => update(i, { valueRank: Number(e.target.value) })}>
-            {VALUE_RANKS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {valueRanks().map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <button title="Remove" onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>
+          <button title={t('Remove')} onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>
         </div>
       ))}
       <div className="row">
-        <button onClick={() => setDraft(d => [...d, { name: '', dataType: uaKey(12), valueRank: -1, arrayDimensions: [] }])}>+ Argument</button>
-        {changed && <button onClick={() => run(() => editor.setArguments(method.id, which, draft))}>Apply</button>}
-        {changed && <button onClick={() => setDraft(current)}>Discard</button>}
+        <button onClick={() => setDraft(d => [...d, { name: '', dataType: uaKey(12), valueRank: -1, arrayDimensions: [] }])}>{t('+ Argument')}</button>
+        {changed && <button onClick={() => run(() => editor.setArguments(method.id, which, draft))}>{t('Apply')}</button>}
+        {changed && <button onClick={() => setDraft(current)}>{t('Discard')}</button>}
       </div>
     </fieldset>
   );
@@ -66,12 +67,12 @@ function fieldsKey(fields: FieldDraft[]): string {
   return JSON.stringify(fields.map(f => [f.name, f.dataType, f.valueRank ?? -1, !!f.isOptional, !!f.allowSubTypes, f.description ?? '', f.value]));
 }
 
-const FIELD_LEGENDS: Record<FieldKind, [string, string]> = {
-  enumeration: ['Values', 'Value'],
-  optionSet: ['Options (bit numbers)', 'Option'],
-  union: ['Fields (exactly one is set)', 'Field'],
-  structure: ['Fields', 'Field'],
-};
+const fieldLegends = (): Record<FieldKind, [string, string]> => ({
+  enumeration: [t('Values'), t('Value')],
+  optionSet: [t('Options (bit numbers)'), t('Option')],
+  union: [t('Fields (exactly one is set)'), t('Field')],
+  structure: [t('Fields'), t('Field')],
+});
 
 export function FieldsSection({ space, editor, dataType, run }: { space: AddressSpace; editor: ModelEditor; dataType: UaNode; run: Run }) {
   const kind = fieldKind(space, dataType.id);
@@ -87,7 +88,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   // Before the return below: a DataType without fields calls no fewer hooks than one with.
   useDraft('Fields', changed);
   if (!kind) return null;
-  const [legend, noun] = FIELD_LEGENDS[kind];
+  const [legend, noun] = fieldLegends()[kind];
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
 
   return (
@@ -99,26 +100,26 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
             <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? 'Bit' : 'Value'}
               onChange={e => update(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })} />
           )}
-          <input placeholder="Name" value={f.name} onChange={e => update(i, { name: e.target.value })} />
+          <input placeholder={t('Name')} value={f.name} onChange={e => update(i, { name: e.target.value })} />
           {!isEnum && (
             <>
               <TypePicker space={space} nodeClass="DataType" value={f.dataType} onPick={k => update(i, { dataType: k })} />
               <select value={f.valueRank ?? -1} onChange={e => update(i, { valueRank: Number(e.target.value) })}>
-                {VALUE_RANKS.filter(([k]) => k === -1 || k === 1).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {valueRanks().filter(([k]) => k === -1 || k === 1).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
               {kind === 'structure' && (
-                <label className="check" title="The field may be absent from a value (StructureWithOptionalFields).">
+                <label className="check" title={t('The field may be absent from a value (StructureWithOptionalFields).')}>
                   <input type="checkbox" checked={!!f.isOptional} onChange={e => update(i, { isOptional: e.target.checked || undefined })} />
-                  optional
+                  {t('optional')}
                 </label>
               )}
-              <label className="check" title="The field may hold a subtype of its DataType (AllowSubTypes); a value then names its own type.">
+              <label className="check" title={t('The field may hold a subtype of its DataType (AllowSubTypes); a value then names its own type.')}>
                 <input type="checkbox" checked={!!f.allowSubTypes} onChange={e => update(i, { allowSubTypes: e.target.checked || undefined })} />
-                subtypes
+                {t('subtypes')}
               </label>
             </>
           )}
-          <button title="Remove" onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>
+          <button title={t('Remove')} onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>
         </div>
       ))}
       <div className="row">
@@ -127,8 +128,8 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
           : { name: '', dataType: uaKey(12), valueRank: -1, description: '' }])}>
           + {noun}
         </button>
-        {changed && <button onClick={() => run(() => editor.setFields(dataType.id, draft))}>Apply</button>}
-        {changed && <button onClick={() => setDraft(current)}>Discard</button>}
+        {changed && <button onClick={() => run(() => editor.setFields(dataType.id, draft))}>{t('Apply')}</button>}
+        {changed && <button onClick={() => setDraft(current)}>{t('Discard')}</button>}
       </div>
     </fieldset>
   );
@@ -151,25 +152,25 @@ export function StructureValueSection({ space, editor, node, shape, current, own
 
   return (
     <fieldset className="add">
-      <legend>Value ({shape.element}{list ? ', array' : ''})</legend>
-      {!current && <div className="note">No value yet.</div>}
+      <legend>{list ? t('Value ({0}, array)', shape.element) : t('Value ({0})', shape.element)}</legend>
+      {!current && <div className="note">{t('No value yet.')}</div>}
       {draft.map((item, i) => (
         <div key={i} className={list ? 'struct-item' : undefined}>
           {list && (
             <div className="struct-head">
               <span>[{i}]</span>
-              {own && <button onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>Remove</button>}
+              {own && <button onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>{t('Remove')}</button>}
             </div>
           )}
           <StructFields space={space} shapeKey={shape.key} value={item} onChange={v => set(i, v)} disabled={!own} depth={0} />
         </div>
       ))}
-      {own && list && <div className="row"><button onClick={() => setDraft(d => [...d, emptyStructure(space, shape.key)])}>Add item</button></div>}
+      {own && list && <div className="row"><button onClick={() => setDraft(d => [...d, emptyStructure(space, shape.key)])}>{t('Add item')}</button></div>}
       {own && (
         <div className="row">
-          {changed && <button onClick={() => run(() => editor.setStructureValue(node.id, draft))}>Apply</button>}
-          {changed && <button onClick={() => setDraft(JSON.parse(currentJson))}>Discard</button>}
-          {current && !changed && <button onClick={() => run(() => editor.setStructureValue(node.id, undefined))}>Remove value</button>}
+          {changed && <button onClick={() => run(() => editor.setStructureValue(node.id, draft))}>{t('Apply')}</button>}
+          {changed && <button onClick={() => setDraft(JSON.parse(currentJson))}>{t('Discard')}</button>}
+          {current && !changed && <button onClick={() => run(() => editor.setStructureValue(node.id, undefined))}>{t('Remove value')}</button>}
         </div>
       )}
     </fieldset>
@@ -184,7 +185,7 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
   space: AddressSpace; shapeKey: string; value: StructValue; onChange: (v: StructValue) => void; disabled: boolean; depth: number;
 }) {
   const shape = useMemo(() => structShape(space, shapeKey), [space, shapeKey]);
-  if (!shape) return <div className="note">Not edited here.</div>;
+  if (!shape) return <div className="note">{t('Not edited here.')}</div>;
   const setField = (name: string, v: FieldValue | undefined) => onChange({ ...value, [name]: v });
 
   if (shape.union) {
@@ -192,13 +193,13 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
     return (
       <div className="struct-fields">
         <div className="row struct-row">
-          <span>set field</span>
+          <span>{t('set field')}</span>
           <select value={chosen?.name ?? ''} disabled={disabled}
             onChange={e => {
               const f = shape.fields.find(x => x.name === e.target.value);
               onChange(f ? { [f.name]: emptyField(space, f, depth) } : {});
             }}>
-            <option value="">(none)</option>
+            <option value="">{t('(none)')}</option>
             {shape.fields.map(f => <option key={f.name} value={f.name}>{f.name}</option>)}
           </select>
         </div>
@@ -245,7 +246,7 @@ function FieldEditor({ space, field: f, value, onChange, disabled, depth, onClea
 }) {
   const label = (
     <span title={typeTitle(space, f)}>
-      {onClear && <input type="checkbox" checked disabled={disabled} onChange={onClear} title="Leave this optional field out" />}
+      {onClear && <input type="checkbox" checked disabled={disabled} onChange={onClear} title={t('Leave this optional field out')} />}
       {f.name}
     </span>
   );
@@ -270,11 +271,11 @@ function FieldEditor({ space, field: f, value, onChange, disabled, depth, onClea
     const items = value as string[];
     return (
       <div className="struct-nested">
-        <div className="struct-head">{label}{!disabled && <button onClick={() => onChange([...items, f.enumValues![0].name])}>Add</button>}</div>
+        <div className="struct-head">{label}{!disabled && <button onClick={() => onChange([...items, f.enumValues![0].name])}>{t('Add')}</button>}</div>
         {items.map((v, i) => (
           <div className="row" key={i}>
             {select(v, x => onChange(items.map((y, j) => (j === i ? x : y))))}
-            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>Remove</button>}
+            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>{t('Remove')}</button>}
           </div>
         ))}
       </div>
@@ -293,18 +294,18 @@ function FieldEditor({ space, field: f, value, onChange, disabled, depth, onClea
   const items = value as StructValue[];
   return (
     <details className="struct-nested" open={depth < 2}>
-      <summary>{label} <span className="note">{items.length} item(s)</span></summary>
+      <summary>{label} <span className="note">{t('{0} item(s)', items.length)}</span></summary>
       {items.map((item, i) => (
         <div className="struct-item" key={i}>
           <div className="struct-head">
             <span>[{i}]</span>
-            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>Remove</button>}
+            {!disabled && <button onClick={() => onChange(items.filter((_, j) => j !== i))}>{t('Remove')}</button>}
           </div>
           <StructFields space={space} shapeKey={f.dataType!} value={item} disabled={disabled} depth={depth + 1}
             onChange={v => onChange(items.map((x, j) => (j === i ? v : x)))} />
         </div>
       ))}
-      {!disabled && <div className="row"><button onClick={() => onChange([...items, emptyStructure(space, f.dataType!, depth + 1)])}>Add item</button></div>}
+      {!disabled && <div className="row"><button onClick={() => onChange([...items, emptyStructure(space, f.dataType!, depth + 1)])}>{t('Add item')}</button></div>}
     </details>
   );
 }
@@ -334,17 +335,17 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
 
   return (
     <fieldset className="add">
-      <legend>State machine</legend>
-      {machine.states.length === 0 && <div className="hint-text">No states yet. A machine needs its states first, then the transitions between them.</div>}
+      <legend>{t('State machine')}</legend>
+      {machine.states.length === 0 && <div className="hint-text">{t('No states yet. A machine needs its states first, then the transitions between them.')}</div>}
       {machine.states.length > 0 && (
         <table className="grid">
-          <thead><tr><th>State</th><th>No.</th><th /></tr></thead>
+          <thead><tr><th>{t('State')}</th><th>{t('No.')}</th><th /></tr></thead>
           <tbody>
             {machine.states.map(s => (
               <tr key={s.key}>
                 <td><button className="link" onClick={() => onSelect(s.key)}>{s.name}</button></td>
                 <td>{s.number ?? ''}</td>
-                <td><button title="Remove" onClick={() => run(() => editor.delete(s.key))}>×</button></td>
+                <td><button title={t('Remove')} onClick={() => run(() => editor.delete(s.key))}>×</button></td>
               </tr>
             ))}
           </tbody>
@@ -352,49 +353,49 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
       )}
       {chosen && (
         <div className="row wrap">
-          <span className="note">Machine of</span>
-          <select value={chosen.key} onChange={e => setHolder(e.target.value)} title="The state whose machine of its own to set.">
+          <span className="note">{t('Machine of')}</span>
+          <select value={chosen.key} onChange={e => setHolder(e.target.value)} title={t('The state whose machine of its own to set.')}>
             {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
           </select>
           <select value={chosen.subMachine?.type ?? ''}
-            title="The machine the state holds (HasSubStateMachine): a Mandatory component of this type, of the machine type chosen here."
+            title={t('The machine the state holds (HasSubStateMachine): a Mandatory component of this type, of the machine type chosen here.')}
             onChange={e => run(() => editor.setSubStateMachine(type.id, chosen.key, e.target.value || undefined))}>
-            <option value="">(none)</option>
+            <option value="">{t('(none)')}</option>
             {machineTypes.map(t => <option key={t.id} value={t.id}>{text(t.displayName) || t.browseName.name}</option>)}
           </select>
         </div>
       )}
       <div className="row">
-        <input placeholder="New state" value={state} onChange={e => setState(e.target.value)}
+        <input placeholder={t('New state')} value={state} onChange={e => setState(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && state.trim()) { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); } }} />
-        <button disabled={!state.trim()} onClick={() => { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); }}>Add state</button>
+        <button disabled={!state.trim()} onClick={() => { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); }}>{t('Add state')}</button>
       </div>
 
       {machine.transitions.length > 0 && (
         /* A list, not a table: the panel is too narrow for four columns of names. */
         <ul className="machine">
-          {machine.transitions.map(t => (
-            <li key={t.key}>
-              <button className="link" onClick={() => onSelect(t.key)}>{t.name}</button>
-              <span className="ends">{ends(machine, t)}{t.causeName ? ` / ${t.causeName}()` : ''}</span>
-              <button title="Remove" onClick={() => run(() => editor.delete(t.key))}>×</button>
+          {machine.transitions.map(tr => (
+            <li key={tr.key}>
+              <button className="link" onClick={() => onSelect(tr.key)}>{tr.name}</button>
+              <span className="ends">{ends(machine, tr)}{tr.causeName ? ` / ${tr.causeName}()` : ''}</span>
+              <button title={t('Remove')} onClick={() => run(() => editor.delete(tr.key))}>×</button>
             </li>
           ))}
         </ul>
       )}
       {machine.states.length >= 1 && (
         <div className="row wrap">
-          <input placeholder="New transition" value={transition.name} onChange={e => setTransition({ ...transition, name: e.target.value })} />
+          <input placeholder={t('New transition')} value={transition.name} onChange={e => setTransition({ ...transition, name: e.target.value })} />
           <select value={transition.from} onChange={e => setTransition({ ...transition, from: e.target.value })}>
-            <option value="">from …</option>
+            <option value="">{t('from …')}</option>
             {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
           </select>
           <select value={transition.to} onChange={e => setTransition({ ...transition, to: e.target.value })}>
-            <option value="">to …</option>
+            <option value="">{t('to …')}</option>
             {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
           </select>
           <select value={transition.cause} onChange={e => setTransition({ ...transition, cause: e.target.value })}>
-            <option value="">caused by …</option>
+            <option value="">{t('caused by …')}</option>
             {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
           </select>
           <button
@@ -404,12 +405,12 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
                 transition.cause || undefined));
               setTransition({ name: '', from: '', to: '', cause: '' });
             }}
-          >Add transition</button>
+          >{t('Add transition')}</button>
         </div>
       )}
       {chart && (
         <details open>
-          <summary>State chart</summary>
+          <summary>{t('State chart')}</summary>
           <div className="chart" dangerouslySetInnerHTML={{ __html: chart }} />
         </details>
       )}
@@ -438,21 +439,21 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
 
   return (
     <fieldset className="add">
-      <legend>References</legend>
-      {refs.length === 0 && <div className="note">None besides the hierarchy.</div>}
+      <legend>{t('References')}</legend>
+      {refs.length === 0 && <div className="note">{t('None besides the hierarchy.')}</div>}
       {refs.map(e => (
         <div className="row ref" key={`${e.type}>${e.target}`}>
           <span><em>{name(e.type)}</em> → {name(e.target)}</span>
-          <button title="Remove" onClick={() => run(() => editor.removeReference(node.id, e.type, e.target))}>×</button>
+          <button title={t('Remove')} onClick={() => run(() => editor.removeReference(node.id, e.type, e.target))}>×</button>
         </div>
       ))}
-      <TypePicker space={space} nodeClass="ReferenceType" value={type} onPick={setType} placeholder="ReferenceType …" />
+      <TypePicker space={space} nodeClass="ReferenceType" value={type} onPick={setType} placeholder={t('ReferenceType …')} />
       <div className="row">
         <select value={target ?? ''} onChange={e => setTarget(e.target.value || undefined)}>
-          <option value="">Target …</option>
+          <option value="">{t('Target …')}</option>
           {targets.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
-        <button disabled={!type || !target} onClick={() => run(() => editor.addReference(node.id, type!, target!))}>Add</button>
+        <button disabled={!type || !target} onClick={() => run(() => editor.addReference(node.id, type!, target!))}>{t('Add')}</button>
       </div>
     </fieldset>
   );
@@ -483,7 +484,7 @@ function placeName(space: AddressSpace, n: UaNode): string {
  * instances. The base model's objects (Server and the like) are left out.
  */
 function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
-  const places = [{ key: '', label: 'Objects folder' }];
+  const places = [{ key: '', label: t('Objects folder') }];
   const objects = space.get(OBJECTS);
   for (const c of objects ? space.children(objects) : []) {
     const n = c.node;
@@ -509,8 +510,8 @@ export function InstantiateSection({ space, editor, type, run, onCreated }: { sp
   });
   return (
     <fieldset className="add">
-      <legend>Create instance</legend>
-      {optional.length > 0 && <div className="note">Optional children to include:</div>}
+      <legend>{t('Create instance')}</legend>
+      {optional.length > 0 && <div className="note">{t('Optional children to include:')}</div>}
       {optional.map(p => (
         <label key={p} className="check">
           <input type="checkbox" checked={picked.has(p)}
@@ -518,15 +519,15 @@ export function InstantiateSection({ space, editor, type, run, onCreated }: { sp
           {p}
         </label>
       ))}
-      <label className="field"><span>Place</span>
+      <label className="field"><span>{t('Place')}</span>
         <select value={places.some(p => p.key === place) ? place : ''} onChange={e => setPlace(e.target.value)}
-          title="Where the instance goes. A node of another model stays as it is; the instance alone refers to it.">
+          title={t('Where the instance goes. A node of another model stays as it is; the instance alone refers to it.')}>
           {places.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
       </label>
       <div className="row">
-        <input placeholder="Name of the instance" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) create(); }} />
-        <button disabled={!name.trim() || !!type.isAbstract} title={type.isAbstract ? 'Abstract types have no instances.' : undefined} onClick={create}>Create</button>
+        <input placeholder={t('Name of the instance')} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) create(); }} />
+        <button disabled={!name.trim() || !!type.isAbstract} title={type.isAbstract ? t('Abstract types have no instances.') : undefined} onClick={create}>{t('Create')}</button>
       </div>
     </fieldset>
   );
