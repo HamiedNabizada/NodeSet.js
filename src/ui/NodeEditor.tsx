@@ -165,7 +165,8 @@ function ValueField({ space, editor, node, own, run }: { space: AddressSpace; ed
     <Field label="Value">
       {text === null
         ? <span className="note">A structured value; kept as it was read.</span>
-        : <TextInput value={text ?? ''} disabled={!own || !builtIn} placeholder={!builtIn ? hint : array ? 'a; b; c' : builtIn}
+        : <TextInput value={text ?? ''} disabled={!own || !builtIn}
+            placeholder={!builtIn ? hint : rank >= 2 ? 'a; b | c; d (rows separated by |)' : array ? 'a; b; c' : builtIn}
             onCommit={v => run(() => editor.setValue(node.id, v))} />}
     </Field>
   );

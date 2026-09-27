@@ -18,6 +18,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
   state refers to with HasSubStateMachine. The panel sets, replaces and removes
   it; the state chart draws such a state with a second outline and the type of
   its machine below it.
+- Matrices: a value of ValueRank 2 is edited row by row ("1; 2 | 3; 4") and
+  written as a Matrix with its Dimensions, the last dimension running fastest
+  (OPC 10000-6); rows of different length are refused. Higher ranks are shown
+  and kept, not edited.
 
 ### Changed
 

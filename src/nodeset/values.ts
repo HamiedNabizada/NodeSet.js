@@ -39,13 +39,16 @@ export function builtInOf(space: AddressSpace, dataType: string | undefined): st
 
 /**
  * The value as the panel shows it: a scalar as its text, an array as its
- * elements joined by "; ". Undefined when there is no value; null when the
- * value is not of a kind the panel edits.
+ * elements joined by "; ", a matrix of two dimensions row by row, the rows
+ * joined by " | ". Undefined when there is no value; null when the value is
+ * not of a kind the panel edits.
  */
 export function valueText(node: UaNode, builtIn: string | undefined): string | undefined | null {
   const xml = node.valueXml?.trim();
   if (!xml) return undefined;
   if (!builtIn) return null;
+  const matrix = /^<(?:\w+:)?Matrix\b[^>]*>([\s\S]*)<\/(?:\w+:)?Matrix>$/.exec(xml);
+  if (matrix) return matrixText(matrix[1], builtIn);
   const list = new RegExp(`^<(?:\\w+:)?ListOf${builtIn}\\b[^>]*>([\\s\\S]*)</(?:\\w+:)?ListOf${builtIn}>$`).exec(xml);
   const items = list ? elements(list[1], builtIn) : elements(xml, builtIn);
   if (items === null || (!list && items.length !== 1)) return null;
@@ -63,6 +66,32 @@ function elements(xml: string, builtIn: string): string[] | null {
     result.push(unescape(wrapped ? new RegExp(`<(?:\\w+:)?${wrapped}>([\\s\\S]*?)<`).exec(inner)?.[1] ?? '' : inner.trim()));
   }
   return rest.trim() === '' ? result : null;
+}
+
+/** A Matrix of two dimensions as rows: "1; 2 | 3; 4"; null for other ranks and for elements that do not add up. */
+function matrixText(inner: string, builtIn: string): string | null {
+  const dimensions = /<(?:\w+:)?Dimensions>([\s\S]*?)<\/(?:\w+:)?Dimensions>/.exec(inner);
+  const sizes = dimensions ? elements(dimensions[1], 'Int32')?.map(Number) : null;
+  const value = /<(?:\w+:)?Value>([\s\S]*)<\/(?:\w+:)?Value>/.exec(inner);
+  const items = value ? elements(value[1], builtIn) : [];
+  if (!sizes || sizes.length !== 2 || items === null || items.length !== sizes[0] * sizes[1] || sizes[1] === 0) return null;
+  const rows: string[] = [];
+  for (let i = 0; i < items.length; i += sizes[1]) rows.push(items.slice(i, i + sizes[1]).join('; '));
+  return rows.join(' | ');
+}
+
+/**
+ * The XML of a matrix typed in the panel, rows separated by "|" and the
+ * elements of a row by ";": a Matrix with its Dimensions and its elements,
+ * the last dimension running fastest (OPC 10000-6).
+ */
+export function matrixXml(builtIn: string, text: string): string {
+  const rows = text.split('|').map(r => r.split(';').map(c => c.trim()).filter(c => c !== '')).filter(r => r.length > 0);
+  if (rows.length === 0) throw new ValueError('A matrix needs at least one row.');
+  const width = rows[0].length;
+  if (rows.some(r => r.length !== width)) throw new ValueError(`Every row of the matrix needs ${width} element(s), as the first has.`);
+  const cells = rows.flat().map(c => element(builtIn, c)).join('');
+  return `<Matrix xmlns="${TYPES_NS}"><Dimensions><Int32>${rows.length}</Int32><Int32>${width}</Int32></Dimensions><Value>${cells}</Value></Matrix>`;
 }
 
 /** The XML of a value typed in the panel; an array when the ValueRank asks for one. */

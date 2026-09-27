@@ -14,7 +14,7 @@
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
-import { builtInOf, structureOf, structureValue, ValueError, valueXml } from './values';
+import { builtInOf, matrixXml, structureOf, structureValue, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
@@ -1064,7 +1064,8 @@ export class ModelEditor {
       const builtIn = builtInOf(this.space(), n.dataType);
       if (!builtIn) throw new EditError('Values of this DataType are structures; the panel does not edit them.');
       try {
-        n.valueXml = valueXml(builtIn, text, (n.valueRank ?? -1) >= 0);
+        const rank = n.valueRank ?? -1;
+        n.valueXml = rank >= 2 ? matrixXml(builtIn, text) : valueXml(builtIn, text, rank >= 0);
         n.extensionObjects = undefined;
       } catch (e) {
         if (e instanceof ValueError) throw new EditError(e.message);

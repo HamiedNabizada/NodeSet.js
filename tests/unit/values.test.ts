@@ -46,6 +46,31 @@ describe('Values', () => {
     expect(ws.space.get(v)!.valueXml).toBeUndefined();
   });
 
+  // OPC 10000-6: a Matrix holds its Dimensions and its elements, the last dimension running fastest.
+  it('writes a matrix row by row, and reads it back', async () => {
+    const { ws, e, v } = await speed();
+    e.setDataType(v, uaKey(11));
+    e.setValueRank(v, 2);
+
+    e.setValue(v, '1; 2; 3 | 4; 5; 6');
+
+    const xml = ws.space.get(v)!.valueXml!.replace(/\s+/g, '');
+    expect(xml).toContain('<Dimensions><Int32>2</Int32><Int32>3</Int32></Dimensions>');
+    expect(xml).toContain('<Value><Double>1</Double><Double>2</Double><Double>3</Double><Double>4</Double><Double>5</Double><Double>6</Double></Value>');
+    const saved = readNodeSet(ws.save()).nodes.find(n => n.browseName.name === 'Speed')!;
+    expect(valueText(saved, 'Double')).toBe('1; 2; 3 | 4; 5; 6');
+  });
+
+  it('refuses a matrix whose rows differ in length, and a matrix where a list belongs', async () => {
+    const { e, v } = await speed();
+    e.setDataType(v, uaKey(11));
+    e.setValueRank(v, 2);
+    expect(() => e.setValue(v, '1; 2 | 3')).toThrow(/every row/i);
+
+    e.setValueRank(v, 1);
+    expect(() => e.setValue(v, '1; 2 | 3; 4')).toThrow(EditError);
+  });
+
   it('reads the values of the base model, and leaves structures alone', () => {
     const ua = readNodeSet(readFileSync(join(__dirname, '../../assets/nodesets/Opc.Ua.NodeSet2.xml'), 'utf8'));
     // A Classification property of the diagnostics model: an enumeration, encoded as Int32 1.
