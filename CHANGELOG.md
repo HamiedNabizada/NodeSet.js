@@ -22,6 +22,16 @@ Until 1.0.0 the library's shape may still change between minor versions.
   written as a Matrix with its Dimensions, the last dimension running fastest
   (OPC 10000-6); rows of different length are refused. Higher ranks are shown
   and kept, not edited.
+- A structure or union field can allow subtypes of its DataType (AllowSubTypes,
+  StructureWithSubtypedValues): a checkbox in the fields section. Values of
+  such fields are shown and kept, not edited; they hardly occur in NodeSets
+  (six fields in the 24 released companion specifications, no values).
+
+### Fixed
+
+- Editing the fields of a DataType in the panel dropped what a field carried
+  that the panel has no field for (AllowSubTypes, MaxStringLength,
+  ArrayDimensions); it now stays with the field's name.
 
 ### Changed
 

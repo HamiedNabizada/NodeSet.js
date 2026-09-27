@@ -249,3 +249,49 @@ describe('Changing the supertype of a DataType', () => {
     expect(d.fields.map(f => [f.name, f.isOptional])).toEqual([['Speed', undefined], ['Flow', undefined]]);
   });
 });
+
+describe('Fields that allow subtypes', () => {
+  async function structure() {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Results/');
+    const e = ws.editor!;
+    const result = e.addType('DataType', 'ResultType');
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1 },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1 },
+    ]);
+    return { ws, e, result };
+  }
+  const field = (ws: Workspace, key: string, name: string) => ws.space.get(key)!.definition!.fields.find(f => f.name === name)!;
+
+  it('lets a field hold a subtype of its DataType, and takes it back', async () => {
+    const { ws, e, result } = await structure();
+
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1 },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1, allowSubTypes: true },
+    ]);
+    expect(field(ws, result, 'Content').otherAttributes.AllowSubTypes).toBe('true');
+    expect(ws.save()).toMatch(/Name="Content"[^>]*AllowSubTypes="true"|AllowSubTypes="true"[^>]*Name="Content"/);
+
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1 },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1 },
+    ]);
+    expect(field(ws, result, 'Content').otherAttributes.AllowSubTypes).toBeUndefined();
+  });
+
+  it('keeps what a field carries that the panel does not edit', async () => {
+    const { ws, e, result } = await structure();
+    // As read from a file: a length limit the panel has no field for.
+    ws.editable!.nodes.find(n => n.id === result)!.definition!.fields.find(f => f.name === 'Id')!.otherAttributes = { MaxStringLength: '20' };
+    ws.editor!.acceptOutsideChanges();
+
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1, description: 'The key' },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1 },
+    ]);
+
+    expect(field(ws, result, 'Id').otherAttributes).toEqual({ MaxStringLength: '20' });
+  });
+});

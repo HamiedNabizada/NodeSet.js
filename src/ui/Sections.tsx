@@ -59,11 +59,11 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   );
 }
 
-interface FieldDraft { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }
+interface FieldDraft { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; allowSubTypes?: boolean; description?: string; value?: number }
 
 /** Fields compared by content, whatever order their properties were set in. */
 function fieldsKey(fields: FieldDraft[]): string {
-  return JSON.stringify(fields.map(f => [f.name, f.dataType, f.valueRank ?? -1, !!f.isOptional, f.description ?? '', f.value]));
+  return JSON.stringify(fields.map(f => [f.name, f.dataType, f.valueRank ?? -1, !!f.isOptional, !!f.allowSubTypes, f.description ?? '', f.value]));
 }
 
 const FIELD_LEGENDS: Record<FieldKind, [string, string]> = {
@@ -77,7 +77,8 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   const kind = fieldKind(space, dataType.id);
   const isEnum = kind === 'enumeration' || kind === 'optionSet';
   const current = useMemo<FieldDraft[]>(() => (dataType.definition?.fields ?? []).map(f => ({
-    name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: f.isOptional, description: text(f.description), value: f.value,
+    name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: f.isOptional,
+    allowSubTypes: f.otherAttributes?.AllowSubTypes === 'true' || undefined, description: text(f.description), value: f.value,
   })), [dataType, dataType.definition]);
   const [draft, setDraft] = useState<FieldDraft[]>(current);
   const currentKey = fieldsKey(current);
@@ -111,6 +112,10 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
                   optional
                 </label>
               )}
+              <label className="check" title="The field may hold a subtype of its DataType (AllowSubTypes); a value then names its own type.">
+                <input type="checkbox" checked={!!f.allowSubTypes} onChange={e => update(i, { allowSubTypes: e.target.checked || undefined })} />
+                subtypes
+              </label>
             </>
           )}
           <button title="Remove" onClick={() => setDraft(d => d.filter((_, j) => j !== i))}>×</button>

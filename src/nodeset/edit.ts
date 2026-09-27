@@ -35,7 +35,16 @@ export const TYPE_DEFINITIONS = {
 
 export type DeclarationKind = 'Object' | 'Variable' | 'Property' | 'Method';
 
-export interface FieldInput { name: string; dataType?: string; valueRank?: number; isOptional?: boolean; description?: string; value?: number }
+export interface FieldInput {
+  name: string;
+  dataType?: string;
+  valueRank?: number;
+  isOptional?: boolean;
+  /** The field may hold a subtype of its DataType (AllowSubTypes; StructureWithSubtypedValues). */
+  allowSubTypes?: boolean;
+  description?: string;
+  value?: number;
+}
 
 /** What the fields of a DataType's definition describe. */
 export type FieldKind = 'enumeration' | 'optionSet' | 'union' | 'structure';
@@ -646,6 +655,12 @@ export class ModelEditor {
       }
     }
     const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
+    // What a field carries that the panel does not edit (MaxStringLength, ArrayDimensions …) stays with its name.
+    const kept = new Map((d.definition?.fields ?? []).map(f => [f.name, f.otherAttributes] as const));
+    const attributesOf = (f: FieldInput) => {
+      const { AllowSubTypes: _s, ...rest } = kept.get(f.name.trim()) ?? {};
+      return { ...rest, ...(!numbered && f.allowSubTypes ? { AllowSubTypes: 'true' } : {}) };
+    };
     d.definition = {
       name: d.browseName,
       otherAttributes: {
@@ -658,7 +673,7 @@ export class ModelEditor {
         ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
         description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
         displayName: [],
-        otherAttributes: {},
+        otherAttributes: attributesOf(f),
       })),
     };
     const entries = d.definition.fields.map(f => ({ name: f.name, value: f.value!, description: text(f.description) }));
