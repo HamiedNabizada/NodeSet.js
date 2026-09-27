@@ -6,6 +6,14 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- An instance can go below a node of a loaded model, as companion
+  specifications put their devices into DI's DeviceSet: the panel offers the
+  Objects folder, what loaded models place there and the model's own
+  instances. The other model's node stays as it is; the new instance alone
+  holds the reference and names it as ParentNodeId.
+
 ### Changed
 
 - Undo keeps what a step changed instead of a copy of the whole file: each

@@ -113,3 +113,36 @@ describe('Methods of instances', () => {
     expect(xml).toMatch(/<UAMethod NodeId="ns=1;i=\d+" BrowseName="1:Start" ParentNodeId="ns=1;i=\d+" MethodDeclarationId="ns=1;i=\d+"/);
   });
 });
+
+describe('Where an instance goes', () => {
+  const DI = 'http://opcfoundation.org/UA/DI/';
+  const DEVICE_SET = `${DI}|i=5001`;
+
+  // Companion specifications put their devices into DI's DeviceSet; the
+  // reference lives on the device, DI's node stays as it is.
+  it('goes below a node of a required model, which only the new node refers to', async () => {
+    const ws = new Workspace();
+    await ws.create(NS);
+    await ws.addBundled(DI);
+    const e = ws.editor!;
+    const pump = e.addType('ObjectType', 'PumpType', `${DI}|i=1002`);
+
+    const instance = e.instantiate(pump, 'Pump1', { parent: DEVICE_SET });
+
+    const node = ws.space.get(instance)!;
+    expect(node.parent).toBe(DEVICE_SET);
+    expect(node.references).toContainEqual({ type: REF.HasComponent, isForward: false, target: DEVICE_SET });
+    expect(ws.space.children(ws.space.get(DEVICE_SET)!).map(c => c.node.id)).toContain(instance);
+    expect(ws.editable!.nodes.some(n => n.id === DEVICE_SET)).toBe(false);
+    expect(ws.save()).toMatch(/ParentNodeId="ns=\d+;i=5001"/);
+  });
+
+  it('refuses a parent that is in no loaded model', async () => {
+    const ws = new Workspace();
+    await ws.create(NS);
+    const e = ws.editor!;
+    const pump = e.addType('ObjectType', 'PumpType');
+
+    expect(() => e.instantiate(pump, 'Pump1', { parent: 'http://example.org/Nowhere/|i=1' })).toThrow(/no node/i);
+  });
+});

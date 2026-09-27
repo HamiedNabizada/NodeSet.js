@@ -8,7 +8,8 @@ import { useDraft } from './drafts';
 import { MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
-import { Argument, text, uaKey, UaNode } from '../nodeset/model';
+import { Argument, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
+import { insideType } from '../nodeset/checks';
 import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
 
@@ -433,12 +434,51 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
 }
 
 /** Creates an instance of a type: a name and the Optional declarations to include. */
-export function InstantiateSection({ editor, type, run, onCreated }: { editor: ModelEditor; type: UaNode; run: Run; onCreated: (key: string) => void }) {
+const OBJECTS = uaKey(85);
+
+/** The last part of a model URI: DI for http://opcfoundation.org/UA/DI/. */
+function modelName(uri: string): string {
+  return uri.replace(/[/:]+$/, '').split(/[/:]/).pop() || uri;
+}
+
+/** A node's names from below the Objects folder down to it: "Hall/Pump2". */
+function placeName(space: AddressSpace, n: UaNode): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (let p: UaNode | undefined = n; p && p.id !== OBJECTS && !seen.has(p.id) && parts.length < 8; p = space.parentOf(p)) {
+    seen.add(p.id);
+    parts.unshift(text(p.displayName) || p.browseName.name);
+  }
+  return parts.join('/');
+}
+
+/**
+ * Where a new instance can go: the Objects folder, what loaded models put
+ * there for others to fill (DI's DeviceSet, say), and the model's own
+ * instances. The base model's objects (Server and the like) are left out.
+ */
+function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
+  const places = [{ key: '', label: 'Objects folder' }];
+  const objects = space.get(OBJECTS);
+  for (const c of objects ? space.children(objects) : []) {
+    const n = c.node;
+    if (n.nodeClass !== 'Object' || editor.owns(n.id) || n.browseName.namespaceUri === UA_NAMESPACE) continue;
+    places.push({ key: n.id, label: `${text(n.displayName) || n.browseName.name} (${modelName(n.browseName.namespaceUri)})` });
+  }
+  for (const n of editor.file.nodes) {
+    if (n.nodeClass === 'Object' && !insideType(space, n)) places.push({ key: n.id, label: placeName(space, n) });
+  }
+  return places;
+}
+
+export function InstantiateSection({ space, editor, type, run, onCreated }: { space: AddressSpace; editor: ModelEditor; type: UaNode; run: Run; onCreated: (key: string) => void }) {
   const [name, setName] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [place, setPlace] = useState('');
   const optional = useMemo(() => editor.optionalPaths(type.id), [editor, type]);
+  const places = useMemo(() => instancePlaces(space, editor), [space, editor]);
   const create = () => run(() => {
-    const key = editor.instantiate(type.id, name, { optional: p => picked.has(p) });
+    const key = editor.instantiate(type.id, name, { optional: p => picked.has(p), parent: place || undefined });
     setName('');
     onCreated(key);
   });
@@ -453,6 +493,12 @@ export function InstantiateSection({ editor, type, run, onCreated }: { editor: M
           {p}
         </label>
       ))}
+      <label className="field"><span>Place</span>
+        <select value={places.some(p => p.key === place) ? place : ''} onChange={e => setPlace(e.target.value)}
+          title="Where the instance goes. A node of another model stays as it is; the instance alone refers to it.">
+          {places.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+      </label>
       <div className="row">
         <input placeholder="Name of the instance" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && name.trim()) create(); }} />
         <button disabled={!name.trim() || !!type.isAbstract} title={type.isAbstract ? 'Abstract types have no instances.' : undefined} onClick={create}>Create</button>

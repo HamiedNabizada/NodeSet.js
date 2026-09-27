@@ -132,7 +132,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       )}
       {own && <ReferencesSection space={space} editor={editor} node={node} run={run} />}
       {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
-        <InstantiateSection editor={editor} type={node} run={run} onCreated={onInstance} />
+        <InstantiateSection space={space} editor={editor} type={node} run={run} onCreated={onInstance} />
       )}
       {own && (
         <div className="actions">

@@ -874,7 +874,11 @@ export class ModelEditor {
       const t = space.get(type);
       if (!t || (t.nodeClass !== 'ObjectType' && t.nodeClass !== 'VariableType')) throw new EditError('Only ObjectTypes and VariableTypes have instances.');
       if (t.isAbstract && !options.allowAbstract) throw new EditError(`'${t.browseName.name}' is abstract; OPC UA does not instantiate abstract types.`);
-      const parent = options.parent ? this.node(options.parent) : undefined;
+      // A parent of another model (DI's DeviceSet, say) is not changed: the new
+      // node alone holds the reference, as companion specifications do.
+      const parent = options.parent ? space.get(options.parent) : undefined;
+      if (options.parent && !parent) throw new EditError(`There is no node '${options.parent}' in the loaded models.`);
+      const ownParent = parent && this.owns(parent.id) ? this.node(parent.id) : undefined;
       if (parent && space.children(parent).some(c => c.node.browseName.name === name.trim())) {
         throw new EditError(`'${parent.browseName.name}' already has a child named '${name.trim()}'.`);
       }
@@ -885,7 +889,7 @@ export class ModelEditor {
       if (t.nodeClass === 'VariableType') { root.dataType = t.dataType; root.valueRank = t.valueRank === -2 ? -1 : t.valueRank; }
       if (parent) {
         const refType = options.referenceType ?? REF.HasComponent;
-        parent.references.push({ type: refType, isForward: true, target: root.id });
+        ownParent?.references.push({ type: refType, isForward: true, target: root.id });
         root.references.push({ type: refType, isForward: false, target: parent.id });
         root.parent = parent.id;
       } else {

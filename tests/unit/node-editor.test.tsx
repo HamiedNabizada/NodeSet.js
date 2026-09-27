@@ -33,4 +33,21 @@ describe('The node editor', () => {
     show(ws, structure);
     expect(legends()).toContain('Fields');
   });
+
+  it('offers where a new instance goes: the Objects folder, what loaded models put there, own instances', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Plant/');
+    await ws.addBundled('http://opcfoundation.org/UA/DI/');
+    const pump = ws.editor!.addType('ObjectType', 'PumpType');
+    ws.editor!.instantiate(pump, 'Pump1');
+
+    show(ws, pump);
+
+    const section = Array.from(host.querySelectorAll('fieldset')).find(f => f.querySelector('legend')?.textContent === 'Create instance')!;
+    const places = Array.from(section.querySelectorAll('select option'), o => o.textContent);
+    expect(places[0]).toBe('Objects folder');
+    expect(places).toContain('DeviceSet (DI)');
+    expect(places).toContain('Pump1');
+    expect(places).not.toContain('Server (UA)');
+  });
 });
