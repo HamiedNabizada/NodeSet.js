@@ -13,6 +13,11 @@ Until 1.0.0 the library's shape may still change between minor versions.
   Objects folder, what loaded models place there and the model's own
   instances. The other model's node stays as it is; the new instance alone
   holds the reference and names it as ParentNodeId.
+- Sub-state machines (OPC 10000-5): a state of a machine type can hold a
+  machine of its own, a Mandatory component of another machine type that the
+  state refers to with HasSubStateMachine. The panel sets, replaces and removes
+  it; the state chart draws such a state with a second outline and the type of
+  its machine below it.
 
 ### Changed
 

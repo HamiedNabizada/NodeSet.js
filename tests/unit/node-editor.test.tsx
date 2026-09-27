@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { uaKey } from '../../src/nodeset/model';
+import { readStateMachine } from '../../src/nodeset/statemachine';
 import { NodeEditor } from '../../src/ui/NodeEditor';
 import { Workspace } from '../../src/workspace';
 
@@ -49,5 +50,24 @@ describe('The node editor', () => {
     expect(places).toContain('DeviceSet (DI)');
     expect(places).toContain('Pump1');
     expect(places).not.toContain('Server (UA)');
+  });
+
+  it('gives a state a machine of its own from the panel', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Machine/');
+    const main = ws.editor!.addStateMachineType('MainStateMachineType');
+    const running = ws.editor!.addState(main, 'Running', 1);
+    const sub = ws.editor!.addStateMachineType('ExecuteStateMachineType');
+
+    show(ws, main);
+    const machineOf = host.querySelector('select[title^="The machine the state holds"]') as HTMLSelectElement;
+    expect(Array.from(machineOf.options, o => o.textContent)).toEqual(['(none)', 'ExecuteStateMachineType']);
+    act(() => {
+      machineOf.value = sub;
+      machineOf.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const state = readStateMachine(ws.space, ws.space.get(main)!).states.find(s => s.key === running)!;
+    expect(state.subMachine?.type).toBe(sub);
   });
 });

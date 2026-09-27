@@ -159,6 +159,13 @@ export function stateChartSvg(machine: StateMachine, size = 420): string {
     const p = places.get(s.key)!;
     parts.push(`<rect x="${round(p.x - box.width / 2)}" y="${round(p.y - box.height / 2)}" width="${box.width}" height="${box.height}" rx="14"`
       + ' fill="#ffffff" stroke="#1f2328"/>');
+    // A state with a machine of its own: a second outline, and the machine's type below.
+    if (s.subMachine) {
+      parts.push(`<rect x="${round(p.x - box.width / 2 + 3)}" y="${round(p.y - box.height / 2 + 3)}" width="${box.width - 6}" height="${box.height - 6}" rx="11"`
+        + ' fill="none" stroke="#1f2328"/>');
+      parts.push(`<text x="${round(p.x)}" y="${round(p.y + box.height / 2 + 13)}" text-anchor="middle" font-family="Segoe UI, Arial" font-size="10"`
+        + ` fill="#57606a">${escape(s.subMachine.typeName ?? s.subMachine.name)}</text>`);
+    }
     parts.push(`<text x="${round(p.x)}" y="${round(p.y + 4)}" text-anchor="middle" font-family="Segoe UI, Arial" font-size="12">${escape(s.name)}</text>`);
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${parts.join('')}</svg>`;

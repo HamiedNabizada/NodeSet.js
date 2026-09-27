@@ -146,6 +146,16 @@ describe('Sub-state machines', () => {
     expect(ws.editable!.nodes.flatMap(n => n.references).some(r => r.target === replaced)).toBe(false);
   });
 
+  it('marks a state that holds a machine in the chart, with the type of that machine', async () => {
+    const { ws, e, main, running, sub } = await machines();
+    e.setSubStateMachine(main, running, sub);
+
+    const svg = stateChartSvg(readStateMachine(ws.space, ws.space.get(main)!));
+
+    expect(svg).toContain('ExecuteStateMachineType');
+    expect(svg.match(/<rect /g)).toHaveLength(2);
+  });
+
   it('refuses a type that is no state machine, and the machine itself', async () => {
     const { e, main, running } = await machines();
     const plain = e.addType('ObjectType', 'PlainType');

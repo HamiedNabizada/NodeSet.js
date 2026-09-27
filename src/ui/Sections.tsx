@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDraft } from './drafts';
-import { MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
+import { isStateMachineType, MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
 import { Argument, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
@@ -320,6 +320,12 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
   const [transition, setTransition] = useState({ name: '', from: '', to: '', cause: '' });
   const methods = useMemo(() => space.children(type).filter(c => c.node.nodeClass === 'Method').map(c => c.node), [space, type]);
   const chart = useMemo(() => stateChartSvg(machine), [machine]);
+  // Machines a state can hold: those of the model and of loaded models, not this one or its subtypes.
+  const machineTypes = useMemo(() => space.ofClass('ObjectType')
+    .filter(n => isStateMachineType(space, n) && n.browseName.namespaceUri !== UA_NAMESPACE && n.id !== type.id && !space.isSubtypeOf(n.id, type.id))
+    .sort((a, b) => (text(a.displayName) || a.browseName.name).localeCompare(text(b.displayName) || b.browseName.name)), [space, type]);
+  const [holder, setHolder] = useState('');
+  const chosen = machine.states.find(s => s.key === holder) ?? machine.states[0];
 
   return (
     <fieldset className="add">
@@ -338,6 +344,20 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
             ))}
           </tbody>
         </table>
+      )}
+      {chosen && (
+        <div className="row wrap">
+          <span className="note">Machine of</span>
+          <select value={chosen.key} onChange={e => setHolder(e.target.value)} title="The state whose machine of its own to set.">
+            {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+          </select>
+          <select value={chosen.subMachine?.type ?? ''}
+            title="The machine the state holds (HasSubStateMachine): a Mandatory component of this type, of the machine type chosen here."
+            onChange={e => run(() => editor.setSubStateMachine(type.id, chosen.key, e.target.value || undefined))}>
+            <option value="">(none)</option>
+            {machineTypes.map(t => <option key={t.id} value={t.id}>{text(t.displayName) || t.browseName.name}</option>)}
+          </select>
+        </div>
       )}
       <div className="row">
         <input placeholder="New state" value={state} onChange={e => setState(e.target.value)}
