@@ -8,6 +8,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- A user manual, `docs/manual.md`, with pictures taken by
+  `npm run manual:shots` (Playwright, outside the end-to-end tests).
 - The interface in German, following the language of the browser (inside the
   AutomationML Editor plugin the language of Windows); OPC UA terms stay as the
   specification names them. The messages of the core (EditError, findings,

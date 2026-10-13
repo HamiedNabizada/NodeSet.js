@@ -30,6 +30,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build:web && playwright test",
+    "manual:shots": "npm run build:web && playwright test -c playwright.manual.config.ts",
     "build:web": "webpack --config webpack.config.js --mode production",
     "build:lib": "webpack --config webpack.lib.config.js --mode production && tsc -p tsconfig.lib.json",
     "verify:core": "node scripts/verify-core.cjs"
