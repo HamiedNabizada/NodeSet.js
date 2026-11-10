@@ -21,7 +21,8 @@ export function ModelPanel({ workspace, run, onLoaded }: {
 
   const loaded = workspace.loadedModels;
   const declared = new Set(model.requiredModels.map(r => r.modelUri));
-  const offer = OFFERED.filter(uri => isBundled(uri) && !loaded.some(m => m.modelUri === uri));
+  // Not the model being edited: loaded beside itself, it would count every reference twice.
+  const offer = OFFERED.filter(uri => isBundled(uri) && !loaded.some(m => m.modelUri === uri) && !workspace.ownNamespaces.includes(uri));
   const commit = () => {
     if (version !== model.version || date !== model.publicationDate?.slice(0, 10)) run(() => workspace.editor!.setModelInfo(version, date));
   };
@@ -35,8 +36,10 @@ export function ModelPanel({ workspace, run, onLoaded }: {
     e.target.value = '';
     if (!file) return;
     try {
+      const before = workspace.loadedModels.length;
       const missing = await workspace.addRequired(await file.text());
-      onLoaded(missing.length > 0 ? t('Loaded {0}; it requires models that are missing: {1}.', file.name, missing.join(', ')) : t('Loaded {0}.', file.name), missing.length > 0);
+      if (workspace.loadedModels.length === before) onLoaded(t('{0} adds no model: its models are open or loaded already.', file.name));
+      else onLoaded(missing.length > 0 ? t('Loaded {0}; it requires models that are missing: {1}.', file.name, missing.join(', ')) : t('Loaded {0}.', file.name), missing.length > 0);
     } catch (err) {
       onLoaded(t('{0}: {1}', file.name, translate(err as Error)), true);
     }

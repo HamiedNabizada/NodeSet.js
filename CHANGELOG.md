@@ -6,6 +6,15 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Fixed
+
+- Loading the model that is open (the DI sample, then Load DI/, or its file
+  through Load a NodeSet file…) loaded it a second time: every reference
+  counted twice, and showing DeviceType took the modeler down. The model
+  being edited is no longer offered nor loaded, also not as a model another
+  file requires; an address space counts a reference once even when two of
+  its files hold the node, and a diagram draws a line once.
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

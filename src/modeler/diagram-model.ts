@@ -112,6 +112,13 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
 
   const shapes: DiagramShape[] = [];
   const lines: DiagramLine[] = [];
+  // diagram-js takes an id once; a reference counted twice is drawn once.
+  const lineIds = new Set<string>();
+  const addLine = (l: DiagramLine, to: DiagramLine[] = lines) => {
+    if (lineIds.has(l.id)) return;
+    lineIds.add(l.id);
+    to.push(l);
+  };
   const placed = new Map<string, DiagramShape>();
   let truncated = false;
   let row = 0;
@@ -144,7 +151,7 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
   const superShape = supertype ? shape(supertype, 0) : undefined;
   const root = shape(type, 0);
   if (superShape) {
-    lines.push({
+    addLine({
       id: `${root.id}->${superShape.id}:subtype`,
       source: superShape.id,
       target: root.id,
@@ -161,12 +168,12 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
     }
     for (const { edge, node: child } of space.children(node)) {
       if (placed.has(child.id)) {
-        lines.push(line(space, edge, parent, placed.get(child.id)!));
+        addLine(line(space, edge, parent, placed.get(child.id)!));
         continue;
       }
       if (shapes.length >= maxShapes) { truncated = true; return; }
       const s = shape(child, level);
-      lines.push(line(space, edge, parent, s));
+      addLine(line(space, edge, parent, s));
       walk(s, child, level + 1);
     }
   };
@@ -181,7 +188,7 @@ export function buildTypeDiagram(space: AddressSpace, typeKey: string, options: 
     for (const e of space.out(s.nodeKey)) {
       if (space.isHierarchical(e.type) || e.type === REF.HasTypeDefinition || e.type === REF.HasModellingRule) continue;
       const target = placed.get(e.target);
-      if (target && target !== s) sideways.push(line(space, e, s, target));
+      if (target && target !== s) addLine(line(space, e, s, target), sideways);
     }
   }
   const edge = Math.max(...shapes.map(s => s.x + s.width));

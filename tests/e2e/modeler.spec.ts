@@ -66,6 +66,25 @@ test('keeps the model through a failure of the modeler, to save it and to go on 
   await expect(typeList(page).filter({ hasText: 'ValveType' })).toHaveCount(1);
 });
 
+// DI loaded beside the open DI sample counted every reference twice, and the
+// diagram of DeviceType then took the modeler down.
+test('does not load the open model a second time', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open DI sample' }).click();
+  await expect(page.locator('.status')).toContainText('nodes of http://opcfoundation.org/UA/DI/');
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Load DI/ })).toHaveCount(0);
+
+  await page.locator('.button-like input[type=file]').setInputFiles(join(__dirname, '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml'));
+  await expect(page.locator('.status')).toContainText('adds no model');
+  await typeList(page).filter({ hasText: /^DeviceType$/ }).click();
+  await expect(page.locator('.editor h3')).toContainText('DeviceType');
+  await expect(page.locator('.djs-shape')).not.toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('counts an edit that made the modeler fail as unsaved', async ({ page }) => {
   await openNodeSet(page, fixture);
   await breakSorting(page);

@@ -186,9 +186,11 @@ panel when no node is selected.
 - **Models in use**: every loaded model with its version, marked
   "required" when the model declares it as a RequiredModel and "loaded"
   otherwise. **Load DI/** loads the DI model that ships with the modeler
-  (the button is there while DI is not loaded). **Load a NodeSet file…**
-  loads any other NodeSet, with the models it requires as far as the
-  modeler has them. The types of a loaded model can then be used in yours.
+  (the button is there while DI is neither loaded nor the model you edit).
+  **Load a NodeSet file…** loads any other NodeSet, with the models it
+  requires as far as the modeler has them. A file of models that are loaded
+  already, or of the model you edit, adds nothing, and the status line says
+  so. The types of a loaded model can then be used in yours.
 
 ### Dialogs, the status line and failures
 

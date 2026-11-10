@@ -45,6 +45,8 @@ export class Workspace {
   }
 
   private async start(file: NodeSetFile): Promise<OpenResult> {
+    // The model open before is no longer the one being edited, so its models are loaded if the new one needs them.
+    this.editor = undefined;
     this.dependencies.length = 0;
     this.loaded.clear();
     this.added.length = 0;
@@ -56,10 +58,15 @@ export class Workspace {
     return { file, missing };
   }
 
-  /** Adds a model from a NodeSet file, with what it requires; returns the models still missing. */
+  /**
+   * Adds a model from a NodeSet file, with what it requires; returns the
+   * models still missing. A file of models that are loaded already, or that
+   * is the model being edited, adds nothing: loading the edited model a
+   * second time would count each of its references twice.
+   */
   async addRequired(xml: string): Promise<string[]> {
     const file = readNodeSet(xml);
-    if (file.models.length > 0 && file.models.every(m => this.loaded.has(m.modelUri))) return [];
+    if (file.models.length > 0 && file.models.every(m => this.isPresent(m.modelUri))) return [];
     const missing = await this.require(file, new Set());
     this.add(file);
     this.added.push(xml);
@@ -72,9 +79,9 @@ export class Workspace {
     return [...this.added];
   }
 
-  /** Adds a model the modeler ships (DI), with what it requires. */
+  /** Adds a model the modeler ships (DI), with what it requires; nothing when it is loaded or being edited. */
   async addBundled(modelUri: string): Promise<void> {
-    if (this.loaded.has(modelUri)) return;
+    if (this.isPresent(modelUri)) return;
     const file = await loadBundled(modelUri);
     await this.require(file, new Set());
     this.add(file);
@@ -112,6 +119,11 @@ export class Workspace {
     return added;
   }
 
+  /** Whether a model is loaded already or is the one being edited. */
+  private isPresent(modelUri: string): boolean {
+    return this.loaded.has(modelUri) || this.ownNamespaces.includes(modelUri);
+  }
+
   private add(file: NodeSetFile) {
     this.dependencies.push(file);
     for (const m of file.models) this.loaded.add(m.modelUri);
@@ -132,7 +144,7 @@ export class Workspace {
     const missing: string[] = [];
     const needed = new Set([UA_NAMESPACE, ...file.models.flatMap(m => m.requiredModels.map(r => r.modelUri))]);
     for (const uri of needed) {
-      if (this.loaded.has(uri) || visiting.has(uri) || file.models.some(m => m.modelUri === uri)) continue;
+      if (this.isPresent(uri) || visiting.has(uri) || file.models.some(m => m.modelUri === uri)) continue;
       if (!isBundled(uri)) { missing.push(uri); continue; }
       visiting.add(uri);
       const dependency = await loadBundled(uri);

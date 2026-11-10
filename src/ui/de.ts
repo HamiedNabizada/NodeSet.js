@@ -261,6 +261,7 @@ export const de: Record<string, string> = {
   "to …": "nach …",
   "values of this DataType are not edited here": "Werte dieses DataTypes werden hier nicht bearbeitet",
   "warning": "Warnung",
+  "{0} adds no model: its models are open or loaded already.": "{0} fügt kein Modell hinzu: seine Modelle sind schon geöffnet oder geladen.",
   "{0} children are named '{1}'.": "{0} Kindknoten heißen '{1}'.",
   "{0} fields are named '{1}'.": "{0} Felder heißen '{1}'.",
   "{0} has no \"Default XML\" encoding.": "{0} hat kein Encoding \"Default XML\".",

@@ -53,4 +53,15 @@ describe('Type diagram in the notation of OPC 10000-3 Annex C', () => {
     const deep = buildTypeDiagram(space, `${DI}|i=1002`, { depth: 3 });
     expect(deep.shapes.length).toBeGreaterThan(diagram.shapes.length);
   });
+
+  // diagram-js refuses an id it has already; a reference counted twice must not get that far.
+  it('draws a reference that is counted twice as one line', () => {
+    const twice = Object.create(space) as AddressSpace;
+    twice.children = n => [...space.children(n), ...space.children(n)];
+    twice.out = (key, type, sub) => [...space.out(key, type, sub), ...space.out(key, type, sub)];
+    const d = buildTypeDiagram(twice, `${DI}|i=1002`, { depth: 2 });
+    const ids = d.lines.map(l => l.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
 });
