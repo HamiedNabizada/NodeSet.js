@@ -82,7 +82,9 @@ Discard them?"
 
 From left to right: **New model…**, **Open NodeSet…**, **Open DI sample**,
 **Save NodeSet** (with a star, **Save NodeSet \***, while there are unsaved
-changes), **Undo**, **Redo**, **Reset layout** (while a diagram is shown),
+changes), **Undo**, **Redo**, **Reset layout** and **Export SVG** (while a
+diagram is shown; the latter saves the diagram as a picture, named after
+its type),
 **Model**, the **Checks** button, which counts the findings ("Checks: 1
 error(s), 0 warning(s)"), and the checkbox **Types of required models**.
 In a narrow window the toolbar takes two rows.
@@ -98,7 +100,9 @@ adds a state machine type. Abstract types are set in italics.
 At first the list shows the types of the model you edit. With **Types of
 required models** checked, it also shows those of the loaded models, in
 grey. The group Instances lists the model's Objects and Variables that the
-Objects folder organizes, each with its type after `::`.
+Objects folder organizes or that hang below a node of a loaded model, such
+as DI's DeviceSet, each with its type after `::`. What an instance holds is
+not listed; it shows in that instance's diagram.
 
 Click an entry, or select it with the keyboard and press Enter or Space: the
 canvas shows its diagram and the panel on the right its properties.
@@ -143,6 +147,8 @@ model a small context pad appears beside the shape. Its entries:
 | **→** | Draw a reference to another node (see [References](#references)) |
 | **×** | Delete the node and what it holds |
 
+The Delete key does what **×** does, for the shape selected on the canvas.
+
 Double-click a shape to open its type: a type shows its own diagram, an
 Object or Variable the diagram of its TypeDefinition.
 
@@ -168,7 +174,9 @@ Some sections are edited as a whole: the arguments of a method, the fields
 of a DataType and a structure value. Their changes wait until you click
 **Apply**, and **Discard** drops them. Selecting another node, saving or
 applying the model to a document while such changes wait asks first
-("…: changes not applied yet. Drop them?").
+("…: changes not applied yet. Drop them?"). Clicking the node you are on, or
+a change that redraws the canvas, asks nothing. The panel of another node
+starts afresh: nothing you typed or picked for one node reaches the next.
 
 At the bottom, a type has **Show diagram**, and every node of your model has
 **Delete**.
@@ -185,10 +193,12 @@ panel when no node is selected.
   NodeSet declares for the model.
 - **Models in use**: every loaded model with its version, marked
   "required" when the model declares it as a RequiredModel and "loaded"
-  otherwise. **Load DI/** loads the DI model that ships with the modeler
-  (the button is there while DI is not loaded). **Load a NodeSet file…**
-  loads any other NodeSet, with the models it requires as far as the
-  modeler has them. The types of a loaded model can then be used in yours.
+  otherwise. **Load DI** loads the DI model that ships with the modeler
+  (the button is there while DI is neither loaded nor the model you edit).
+  **Load a NodeSet file…** loads any other NodeSet, with the models it
+  requires as far as the modeler has them. A file of models that are loaded
+  already, or of the model you edit, adds nothing, and the status line says
+  so. The types of a loaded model can then be used in yours.
 
 ### Dialogs, the status line and failures
 
@@ -212,7 +222,8 @@ starts the modeler anew with the same model.
 ## Types
 
 Each group of the list has a **+** that adds a type of its kind; a dialog
-asks for the name. A new type starts with this supertype:
+asks for the name and the supertype, suggesting the types of all loaded
+models. The supertype it offers first:
 
 | New | Supertype | Also |
 |---|---|---|
@@ -221,10 +232,21 @@ asks for the name. A new type starts with this supertype:
 | DataType | Structure | the encodings "Default Binary", "Default XML" and "Default JSON" |
 | ReferenceType | NonHierarchicalReferences | InverseName "Inverse" and the name |
 
-Every type has the fields **Name** (the BrowseName; the DisplayName follows
-it), **NodeId** (assigned by the modeler), **Description**, **Supertype** and
+Every type has the fields **Name** (the BrowseName), **DisplayName** (the
+name shown, which follows the Name until you give it one of its own; empty,
+it is the Name again), **NodeId** (assigned by the modeler), **Description**, **Supertype** and
 **Abstract**. Type a supertype's name to change it; the modeler refuses one
 that is a subtype of the type itself. An abstract type has no instances.
+
+The panel of an ObjectType or VariableType lists under **Inherited** what
+it gets from its supertypes and does not declare itself, by the type it
+comes from, each with its NodeClass and cardinality. The list is read only;
+click a name to show that declaration. A declaration of the type that
+overrides one of a supertype hides it there.
+
+**Add subtype** in the panel of a type adds a subtype of it to your model,
+also of a type of a loaded model (DeviceType of DI, FolderType of the base
+model): type the name and click **Add**; the new type is shown.
 
 ObjectTypes and VariableTypes hold instance declarations, the subject of the
 [next chapter](#instance-declarations-and-modellingrules). A state machine
@@ -315,6 +337,13 @@ the DataType BaseDataType and the ValueRank Scalar.
 - **ModellingRule**: the four rules and **(none)**. The diagram shows the
   rule as the cardinality at the held node.
 - **DataType**, **ValueRank** and **Value**: see [Values](#values).
+- **AccessLevel** and **UserAccessLevel** (Variables): **read** and
+  **write**, who may read and write the value; the other bits of the level
+  stay as they were read. **Historizing**: the server keeps the value's
+  history. **MinimumSamplingInterval**: how fast the server can sample the
+  value, in milliseconds (-1 not known, 0 continuously); empty for none.
+  Without a change a variable can be read, not written, as the schema says.
+  An instance takes these from its declaration.
 
 A placeholder (MandatoryPlaceholder, OptionalPlaceholder) of an Object or
 Variable is named in angle brackets, such as `<Pump>`; the checks warn when
@@ -348,10 +377,14 @@ line.
 
 ### Renaming and deleting
 
-**Name** renames the node; its DisplayName follows. **Delete** in the panel,
+**Name** renames the node; its DisplayName follows, unless it was given one
+of its own in **DisplayName**, which every node has. **Delete** in the panel,
 or **×** in the context pad, deletes the node, everything it holds and every
 reference to them. A type that has subtypes is not deleted: "'…' has
-subtypes; delete or move them first."
+subtypes; delete or move them first." Nor is a DataType that a variable, an
+argument or a field still names: "'StatusType' is the DataType of 'Speed';
+give it another DataType first." A new node never gets the NodeId of a node
+deleted in the same session.
 
 ## Values
 
@@ -384,6 +417,14 @@ QualifiedName or StatusCode, are not edited in the panel.
 OneDimension and TwoDimensions. With OneDimension or OneOrMoreDimensions the
 value is an array: its elements separated by semicolons, `1; 2; 3`. With the
 other ranks except TwoDimensions it is a single value.
+
+Changing the DataType or the ValueRank changes the value in the same step:
+a value the new DataType takes as it is stays (a Double for Number); one
+whose elements fit the new type and rank is written anew (`3` as Double
+becomes `3` as Int32, a single value becomes an array of one); any other is
+removed (`3.5` for Int32, an array of two for Scalar). Undo brings back both.
+**Remove value** below the field removes the value, also one the panel shows
+but does not edit.
 
 ### Matrices
 
@@ -462,9 +503,11 @@ starts at a node of your model and may lead to any node on the diagram.
 In the panel, the section **References** lists the node's references
 besides the hierarchy, the type system and the ModellingRule, or says "None
 besides the hierarchy." **×** removes one. To add one, type the
-ReferenceType into the field **ReferenceType …**, choose the node it leads
-to from **Target …** (the nodes of your model, by their path, such as
-`PumpType/Impeller`) and click **Add**.
+ReferenceType into the field **ReferenceType …**, type two letters or more
+of the name of the node it leads to into **Target …** and choose it from the
+nodes offered (any node of any loaded model, by its path and model, such as
+`PumpType/Impeller (Pump)` or `DeviceType (DI)`; the nodes of your model
+come first, at most 50 at a time), then click **Add**.
 
 The diagram draws such references on rails to the right of the shapes,
 with their name. In the example, `Motor` drives `Impeller`.
@@ -493,8 +536,10 @@ first, then the transitions between them."
   machine type.
 
 Click the name of a state or transition to show it in the panel; **×**
-removes it. The ends of an existing transition have no field of their own:
-remove the transition and add it again.
+removes it. **✎** beside a transition of your model opens its ends and its
+cause for change: choose another state or method, or the empty entry to
+remove one (the checks then report the missing end). Each change is one
+step of undo; an end must be a state of the machine.
 
 ![The section State machine of PumpStateMachineType: the states Idle 1, Running 2 and Maintenance 3, the row Machine of, the transitions IdleToRunning (Idle to Running, caused by Start()), RunningToIdle, RunningToMaintenance and MaintenanceToIdle, and the row for a new transition](manual/state-machine.png)
 
@@ -506,6 +551,7 @@ types of your model and of the loaded models besides the base model, except
 this type and its subtypes. The modeler adds a Mandatory component
 `<State>StateMachine` of that type, which the state refers to with
 HasSubStateMachine. Another machine type replaces it; **(none)** removes it.
+Deleting the state deletes its machine as well.
 
 ### The state chart
 
@@ -527,8 +573,9 @@ the types of loaded models (FolderType, a DI type and so on).
   below another).
 - **Place**: where the instance goes: the Objects folder, the nodes loaded
   models put there for others to fill (such as **DeviceSet (DI)** once DI
-  is loaded), or an instance of your model. A node of another model stays
-  as it is; the new instance alone holds the reference.
+  is loaded), or an Object instance of your model (not the encodings of a
+  DataType, which are Objects too). A node of another model stays as it is;
+  the new instance alone holds the reference.
 - **Name of the instance**, then **Create**. For an abstract type **Create**
   stays disabled ("Abstract types have no instances.").
 
@@ -554,7 +601,9 @@ what it lacks: in the example, `FlowRate` was added to `PumpType` after
 
 ## Checks and findings
 
-The modeler checks the model against OPC 10000-3 after every change. The
+The modeler checks the model against OPC 10000-3 after every change, once
+the page is idle, so a large model answers at once and its findings follow;
+moving shapes and **Reset layout** change no node and run no checks. The
 **Checks** button in the toolbar counts the findings, "Checks: 1 error(s),
 0 warning(s)", and is outlined while there are errors. Click it to show or
 hide the list of findings above the status line (the picture in [The
@@ -594,12 +643,19 @@ why.
 | M021 | error or warning | A state or transition has no number, or two of them share one. |
 | M022 | error | An instance is missing a child its type declares as Mandatory. |
 | M023 | error | An instance fills none of a MandatoryPlaceholder its type declares. |
+| M024 | error | A value does not fit the DataType or ValueRank of its node. |
+| M025 | error | A variable or a field names a DataType that is unknown or no DataType. |
 
 ## Undo and redo
 
-**Undo** and **Redo** in the toolbar, or Ctrl+Z and Ctrl+Y (Cmd on a Mac),
-take changes back and bring them again. While the cursor is in a text field
-or a list, the keys belong to that field.
+**Undo** and **Redo** in the toolbar, or Ctrl+Z and Ctrl+Y or Ctrl+Shift+Z
+(Cmd on a Mac; Caps Lock does not matter), take changes back and bring them
+again. While the cursor is in a text field or a list, the keys belong to that
+field.
+
+Ctrl+S saves the NodeSet, as **Save NodeSet** does; inside the AutomationML
+Editor it applies the model to the document, as **Apply to document** does.
+From a text field it takes what you typed first.
 
 Every change is one step: a field, a child, a deletion. So is every
 **Apply** of a section and every file of variables from CSV, however much
@@ -682,6 +738,11 @@ own:
   NodeSets a model requires in its folders.
 - **Apply to document** imports the model into the AutomationML document.
 - **Save NodeSet** opens the plugin's save dialog instead of a download.
+- The page stays editable while the plugin imports or saves. What you change
+  meanwhile is not in what the plugin took, so **Save NodeSet** keeps its
+  `*` and the status line says so, provided the plugin reports which change
+  it took (plugins before NodeSet.js 0.2.1 do not; with them the model counts
+  as saved once the plugin answers).
 - There is no backup in the browser, and the page follows the editor's
   light or dark theme.
 
@@ -701,25 +762,25 @@ What the modeler does not edit, or edits only in part:
   its NodeSet.
 - **NodeIds** are assigned by the modeler, numbers from 1000 upward, and
   cannot be changed.
-- **Attributes without a field** in the panel, such as the DisplayName apart
-  from the name, texts in further locales, AccessLevel, ArrayDimensions and
-  SymbolicName, are kept as they were read.
+- **Attributes without a field** in the panel, such as texts in further
+  locales (the DisplayName and the Description in the first), the bits of AccessLevel beyond
+  read and write, ArrayDimensions and SymbolicName, are kept as they were
+  read.
 - **DataType fields**: their descriptions, the descriptions of enumeration
-  values, and what else a field carries (MaxStringLength, ArrayDimensions)
-  are kept but have no field in the panel.
+  values, and what else a field carries (MaxStringLength, its DisplayName,
+  its ArrayDimensions while it stays an array of the same ValueRank) are
+  kept but have no field in the panel.
 - **Values**: values of built-in types such as NodeId, QualifiedName or
   StatusCode, matrices of three or more dimensions, structures with a field
   that allows subtypes, and structure values of other ValueRanks than
   Scalar and OneDimension are kept, not edited.
-- **Transitions**: the states and cause of an existing transition have no
-  field; remove the transition and add it again.
 - **Views** are neither created nor edited.
 - **The diagram** shows a type's own declarations, three levels deep and
-  at most 200 shapes, and not the ones it inherits. It cannot be exported
-  as a picture.
-- **The list of instances** shows what the Objects folder organizes. An
-  instance placed below another instance shows in that instance's diagram;
-  one placed below a node of a loaded model, such as DeviceSet, is not
-  listed.
+  at most 200 shapes, and not the ones it inherits (the panel lists those
+  under **Inherited**). **Export SVG** writes it as SVG only; for PNG or PDF
+  open the SVG in a browser or a drawing program.
+- **The list of instances** shows the instances the Objects folder
+  organizes or a node of a loaded model holds. An instance placed below
+  another instance shows in that instance's diagram, not in the list.
 - **Instances** do not follow later changes of their type.
 - **Undo** keeps the last 100 steps; moving shapes is not one of them.

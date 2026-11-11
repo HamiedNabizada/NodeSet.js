@@ -87,6 +87,42 @@ describe('Editing a model', () => {
     expect(() => editor.delete(pump)).toThrow(/has subtypes/);
   });
 
+  // A DataType is named by an attribute, not by a reference: deleting it left the
+  // attribute pointing nowhere, and the next new node took over its NodeId.
+  it('refuses to delete a DataType in use, and gives no NodeId out twice', async () => {
+    const { ws, editor, start, speed } = await pumpModel();
+    const status = editor.addType('DataType', 'StatusType');
+    editor.setFields(status, [{ name: 'Code', dataType: uaKey(7) }]);
+    editor.setDataType(speed, status);
+
+    expect(() => editor.delete(status)).toThrow("'StatusType' is the DataType of 'Speed'; give it another DataType first.");
+    editor.setArguments(start, 'Input', [{ name: 'Status', dataType: status, valueRank: -1, arrayDimensions: [] }]);
+    const wrapper = editor.addType('DataType', 'WrapperType');
+    editor.setFields(wrapper, [{ name: 'Status', dataType: status }]);
+    expect(() => editor.delete(status)).toThrow("'StatusType' is the DataType of 'Speed' and 2 more; give them another DataType first.");
+    expect(ws.space.get(status)).toBeDefined();
+
+    editor.setDataType(speed, uaKey(11));
+    editor.setArguments(start, 'Input', []);
+    editor.delete(wrapper);
+    const gone = editor.delete(status);
+    const valve = editor.addType('ObjectType', 'ValveType');
+    const motor = editor.addDeclaration(valve, 'Variable', 'Motor');
+    expect(gone).not.toContain(valve);
+    expect(gone).not.toContain(motor);
+  });
+
+  it('gives no NodeId out that a reference of the file still names', async () => {
+    const draft = new Workspace();
+    await draft.create(PUMPS);
+    const pump = draft.editor!.addType('ObjectType', 'PumpType');
+    draft.editable!.nodes.find(n => n.id === pump)!.references.push({ type: REF.Organizes, isForward: true, target: `${PUMPS}|i=1500` });
+    const ws = new Workspace();
+    await ws.open(draft.save());
+
+    expect(ws.editor!.addType('ObjectType', 'ValveType')).toBe(`${PUMPS}|i=1501`);
+  });
+
   it('writes a model that reads back the same', async () => {
     const { ws } = await pumpModel();
     const again = readNodeSet(ws.save());
@@ -94,6 +130,56 @@ describe('Editing a model', () => {
     expect(again.models[0].modelUri).toBe(PUMPS);
     expect(again.nodes.map(n => n.browseName.name)).toEqual(['PumpType', 'Speed', 'SerialNumber', 'Start']);
     expect(again.nodes[1].references).toContainEqual({ type: REF.HasModellingRule, isForward: true, target: RULE.Mandatory });
+  });
+});
+
+describe('DisplayName and BrowseName', () => {
+  it('gives a node a DisplayName of its own, which renaming then leaves alone', async () => {
+    const { ws, editor, speed } = await pumpModel();
+    const shown = () => ws.space.get(speed)!.displayName;
+    ws.editable!.nodes.find(n => n.id === speed)!.displayName = [{ text: 'Speed' }, { text: 'Drehzahl', locale: 'de' }];
+    editor.acceptOutsideChanges();
+
+    editor.setDisplayName(speed, 'Rotational speed');
+    expect(shown()).toEqual([{ text: 'Rotational speed' }, { text: 'Drehzahl', locale: 'de' }]);
+    editor.rename(speed, 'RotationalSpeed');
+    expect(ws.space.get(speed)!.browseName.name).toBe('RotationalSpeed');
+    expect(shown()[0].text).toBe('Rotational speed');
+    expect(readNodeSet(ws.save()).nodes.find(n => n.id === speed)!.displayName[0].text).toBe('Rotational speed');
+
+    // Empty, it is the BrowseName again, and follows it.
+    editor.setDisplayName(speed, ' ');
+    expect(shown()[0].text).toBe('RotationalSpeed');
+    editor.rename(speed, 'Speed');
+    expect(shown()).toEqual([{ text: 'Speed' }, { text: 'Drehzahl', locale: 'de' }]);
+  });
+});
+
+describe('Access to a variable', () => {
+  it('sets AccessLevel, UserAccessLevel, Historizing and MinimumSamplingInterval, writes them and hands them to instances', async () => {
+    const { ws, editor, pump, speed } = await pumpModel();
+
+    editor.setAccess(speed, { accessLevel: 3, userAccessLevel: 1, historizing: true, minimumSamplingInterval: 100 });
+
+    const node = ws.space.get(speed)!;
+    expect(node.accessLevel).toBe(3);
+    expect(node.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+    const again = readNodeSet(ws.save()).nodes.find(n => n.id === speed)!;
+    expect(again.accessLevel).toBe(3);
+    expect(again.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+    const pump1 = editor.instantiate(pump, 'Pump1');
+    const speed1 = ws.space.children(ws.space.get(pump1)!).find(c => c.node.browseName.name === 'Speed')!.node;
+    expect(speed1.accessLevel).toBe(3);
+    expect(speed1.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+
+    // The defaults of the schema are not written.
+    editor.setAccess(speed, { accessLevel: 1, userAccessLevel: 2, historizing: false, minimumSamplingInterval: undefined });
+    expect(ws.space.get(speed)!.accessLevel).toBeUndefined();
+    expect(ws.space.get(speed)!.otherAttributes).toEqual({ UserAccessLevel: '2' });
+
+    expect(() => editor.setAccess(pump, { accessLevel: 3 })).toThrow(EditError);
+    expect(() => editor.setAccess(speed, { accessLevel: 300 })).toThrow(EditError);
+    expect(() => editor.setAccess(speed, { minimumSamplingInterval: Number('fast') })).toThrow(EditError);
   });
 });
 
@@ -293,5 +379,31 @@ describe('Fields that allow subtypes', () => {
     ]);
 
     expect(field(ws, result, 'Id').otherAttributes).toEqual({ MaxStringLength: '20' });
+  });
+
+  // The reader keeps ArrayDimensions and DisplayName apart from the other attributes; Apply dropped both.
+  it('keeps the ArrayDimensions and the DisplayName of a field', async () => {
+    const { ws, e, result } = await structure();
+    const content = ws.editable!.nodes.find(n => n.id === result)!.definition!.fields.find(f => f.name === 'Content')!;
+    Object.assign(content, { valueRank: 1, arrayDimensions: '3', displayName: [{ text: 'Inhalt', locale: 'de' }] });
+    e.acceptOutsideChanges();
+
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1, description: 'The key' },
+      { name: 'Content', dataType: uaKey(22), valueRank: 1 },
+    ]);
+    expect(field(ws, result, 'Content').arrayDimensions).toBe('3');
+    expect(field(ws, result, 'Content').displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
+    const saved = readNodeSet(ws.save()).nodes.find(n => n.id === result)!.definition!.fields.find(f => f.name === 'Content')!;
+    expect(saved.arrayDimensions).toBe('3');
+    expect(saved.displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
+
+    // A field that is no array any more has no dimensions.
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1 },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1 },
+    ]);
+    expect(field(ws, result, 'Content').arrayDimensions).toBeUndefined();
+    expect(field(ws, result, 'Content').displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
   });
 });

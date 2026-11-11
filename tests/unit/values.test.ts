@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { EditError } from '../../src/nodeset/edit';
 import { uaKey } from '../../src/nodeset/model';
 import { readNodeSet } from '../../src/nodeset/reader';
-import { builtInOf, structureOf, structureText, valueText } from '../../src/nodeset/values';
+import { check } from '../../src/nodeset/checks';
+import { builtInOf, structureOf, structureText, TYPES_NS, valueText } from '../../src/nodeset/values';
 import { Workspace } from '../../src/workspace';
 
 async function speed() {
@@ -80,6 +81,91 @@ describe('Values', () => {
     expect(valueText(classification, 'Int32')).toBe('1');
     expect(valueText(enumStrings, 'LocalizedText')).toMatch(/; /);
     expect(valueText({ ...classification, valueXml: '<ExtensionObject><Body/></ExtensionObject>' }, 'Int32')).toBeNull();
+  });
+});
+
+// <Double>3.5</Double> stayed on a Variable that had become Int32.
+describe('A value after its DataType or ValueRank changed', () => {
+  const xml = (ws: Workspace, key: string) => ws.space.get(key)!.valueXml?.replace(` xmlns="${TYPES_NS}"`, '');
+
+  it('is written anew for the new DataType, or removed when it does not fit', async () => {
+    const { ws, e, v } = await speed();
+    e.setDataType(v, uaKey(11));
+    e.setValue(v, '3.5');
+
+    e.setDataType(v, uaKey(6)); // Int32
+    expect(xml(ws, v)).toBeUndefined();
+
+    e.setDataType(v, uaKey(11));
+    e.setValue(v, '3');
+    e.setDataType(v, uaKey(6));
+    expect(xml(ws, v)).toBe('<Int32>3</Int32>');
+    e.setDataType(v, uaKey(12)); // String
+    expect(xml(ws, v)).toBe('<String>3</String>');
+    e.setDataType(v, uaKey(290)); // Duration, a Double
+    expect(xml(ws, v)).toBe('<Double>3</Double>');
+    // Number takes any number as it is.
+    e.setDataType(v, uaKey(26));
+    expect(xml(ws, v)).toBe('<Double>3</Double>');
+    e.setDataType(v, uaKey(884)); // Range, a structure
+    expect(xml(ws, v)).toBeUndefined();
+    expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M024')).toEqual([]);
+  });
+
+  it('becomes an array, a matrix or a scalar as the ValueRank asks, while its elements fit', async () => {
+    const { ws, e, v } = await speed();
+    e.setDataType(v, uaKey(11));
+    e.setValue(v, '3.5');
+
+    e.setValueRank(v, 1);
+    expect(xml(ws, v)).toBe('<ListOfDouble><Double>3.5</Double></ListOfDouble>');
+    e.setValue(v, '1; 2');
+    e.setValueRank(v, 2);
+    expect(valueText(ws.space.get(v)!, 'Double')).toBe('1; 2');
+    expect(ws.space.get(v)!.valueXml).toContain('<Matrix');
+    e.setValueRank(v, 1);
+    expect(xml(ws, v)).toBe('<ListOfDouble><Double>1</Double><Double>2</Double></ListOfDouble>');
+    e.setValueRank(v, -1);
+    expect(xml(ws, v)).toBeUndefined();
+  });
+
+  it('is undone with the change of the DataType, in one step', async () => {
+    const { ws, e, v } = await speed();
+    e.setDataType(v, uaKey(11));
+    e.setValue(v, '3.5');
+    e.setDataType(v, uaKey(6));
+    e.undo();
+    expect(ws.space.get(v)!.dataType).toBe(uaKey(11));
+    expect(xml(ws, v)).toBe('<Double>3.5</Double>');
+  });
+
+  it('is reported when it does not fit its DataType or ValueRank (M024)', async () => {
+    const { ws, e, v } = await speed();
+    e.setDataType(v, uaKey(6));
+    const node = ws.editable!.nodes.find(n => n.id === v)!;
+    const rules = (valueXml: string, valueRank = -1) => {
+      node.valueXml = valueXml;
+      node.valueRank = valueRank;
+      e.acceptOutsideChanges();
+      e.rename(v, 'Speed');
+      return check(ws.space, ws.editable!).filter(f => f.rule === 'M024').map(f => f.severity);
+    };
+
+    expect(rules('<Double>3.5</Double>')).toEqual(['error']);
+    expect(rules('<Int32>fast</Int32>')).toEqual(['error']);
+    expect(rules('<ListOfInt32><Int32>1</Int32></ListOfInt32>')).toEqual(['error']);
+    expect(rules('<Int32>1</Int32>', 1)).toEqual(['error']);
+    expect(rules('<Int32>1</Int32>')).toEqual([]);
+    expect(rules('<ListOfInt32><Int32>1</Int32></ListOfInt32>', 1)).toEqual([]);
+    expect(rules('<ListOfInt32><Int32>1</Int32></ListOfInt32>', -2)).toEqual([]);
+  });
+
+  it('finds no value of the base model or of DI that does not fit', async () => {
+    for (const name of ['Opc.Ua.NodeSet2.xml', 'Opc.Ua.Di.NodeSet2.xml']) {
+      const ws = new Workspace();
+      await ws.open(readFileSync(join(__dirname, '../../assets/nodesets', name), 'utf8'));
+      expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M024').map(f => f.message)).toEqual([]);
+    }
   });
 });
 

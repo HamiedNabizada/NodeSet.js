@@ -14,7 +14,8 @@
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
-import { builtInOf, matrixXml, structureOf, structureValue, ValueError, valueXml } from './values';
+import { readStateMachine } from './statemachine';
+import { builtInOf, elementsXml, matrixXml, shapeFor, structureOf, structureValue, valueElements, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 import { Message, MessageError, msg } from './message';
@@ -70,6 +71,8 @@ const ENUM_VALUE_TYPE = uaKey(7594);
 const OPTION_SET = uaKey(12755);
 const UNION = uaKey(12756);
 const UINTEGER = uaKey(28);
+/** What an instance takes over from its declaration of how its value is read, written and sampled, besides AccessLevel. */
+const ACCESS_ATTRIBUTES = ['UserAccessLevel', 'Historizing', 'MinimumSamplingInterval'];
 /** Bits of the unsigned integers an OptionSet can be a subtype of. */
 const BITS: Record<string, number> = { [uaKey(3)]: 8, [uaKey(5)]: 16, [uaKey(7)]: 32, [uaKey(9)]: 64 };
 
@@ -182,6 +185,8 @@ export class ModelEditor {
   private recordedState?: Recorded;
   /** Inside a batch the changes become one step when the outermost batch ends. */
   private batching = 0;
+  /** The highest number of a NodeId the file named or the editor gave out; see nextId. */
+  private highest?: number;
 
   /**
    * @param file the editable file, changed in place
@@ -362,13 +367,32 @@ export class ModelEditor {
     return n;
   }
 
+  /**
+   * The next free numeric NodeId of the model's namespace. Numbers count on
+   * from the highest the file names anywhere (a node, a reference, a
+   * DataType) and the highest given out while editing, so a node deleted,
+   * or one an undo took back, never passes its NodeId to another.
+   */
   private nextId(): string {
-    let max = 0;
-    for (const n of this.file.nodes) {
-      const { namespaceUri, identifier } = parseNodeIdKey(n.id);
-      if (namespaceUri === this.namespace && identifier.startsWith('i=')) max = Math.max(max, Number(identifier.slice(2)));
+    if (this.highest === undefined) {
+      let max = 999;
+      const note = (key: string | undefined) => {
+        if (!key) return;
+        const { namespaceUri, identifier } = parseNodeIdKey(key);
+        if (namespaceUri === this.namespace && identifier.startsWith('i=')) max = Math.max(max, Number(identifier.slice(2)) || 0);
+      };
+      for (const n of this.file.nodes) {
+        note(n.id); note(n.parent); note(n.dataType); note(n.methodDeclaration);
+        for (const r of n.references) { note(r.type); note(r.target); }
+        for (const a of n.arguments ?? []) note(a.dataType);
+        for (const f of n.definition?.fields ?? []) note(f.dataType);
+      }
+      this.highest = max;
     }
-    return `${this.namespace}|i=${Math.max(max + 1, 1000)}`;
+    let key: string;
+    do key = `${this.namespace}|i=${++this.highest}`;
+    while (this.file.nodes.some(n => n.id === key));
+    return key;
   }
 
   private create(nodeClass: NodeClass, name: string): UaNode {
@@ -436,9 +460,23 @@ export class ModelEditor {
       if (parent && this.space().children(parent).some(c => c.node.id !== key && c.node.browseName.name === trimmed)) {
         throw new EditError(msg`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
       }
+      // The DisplayName follows the name unless it was given one of its own; texts in other locales stay.
+      if (!text(n.displayName) || text(n.displayName) === n.browseName.name) n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }, ...n.displayName.slice(1)];
       n.browseName = { ...n.browseName, name: trimmed };
-      n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }];
       if (n.definition) n.definition.name = n.browseName;
+    });
+  }
+
+  /**
+   * The DisplayName apart from the BrowseName, in its first locale; texts in
+   * other locales stay. Empty text makes it the BrowseName again, which a
+   * rename then carries along.
+   */
+  setDisplayName(key: string, displayName: string): void {
+    this.change(() => {
+      const n = this.node(key);
+      const trimmed = displayName.trim() || n.browseName.name;
+      n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }, ...n.displayName.slice(1)];
     });
   }
 
@@ -515,6 +553,7 @@ export class ModelEditor {
     if (after && numbered(before) === numbered(after)) {
       this.writeFields(d, d.definition.fields.map(f => ({
         name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: after === 'union' ? undefined : f.isOptional, description: text(f.description), value: f.value,
+        allowSubTypes: f.otherAttributes.AllowSubTypes === 'true' || undefined,
       })), supertype);
     } else {
       d.definition = undefined;
@@ -545,12 +584,101 @@ export class ModelEditor {
       const t = this.space().get(dataType);
       if (!t || t.nodeClass !== 'DataType') throw new EditError(msg`The data type must be a DataType.`);
       if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no data type.`);
+      const before = n.dataType;
       n.dataType = dataType;
+      this.fitValue(n, before, n.valueRank ?? -1);
     });
   }
 
   setValueRank(key: string, valueRank: number): void {
-    this.change(() => { this.node(key).valueRank = valueRank; });
+    this.change(() => {
+      const n = this.node(key);
+      const before = n.valueRank ?? -1;
+      n.valueRank = valueRank;
+      if (n.nodeClass === 'Variable' || n.nodeClass === 'VariableType') this.fitValue(n, n.dataType, before);
+    });
+  }
+
+  /**
+   * Fits the value to a new DataType or ValueRank, in the same step: a value
+   * the new DataType takes as it is (the old one derives from it) stays; one
+   * whose elements fit the new built-in type and shape is written anew; any
+   * other is removed.
+   */
+  private fitValue(n: UaNode, typeBefore: string | undefined, rankBefore: number): void {
+    const space = this.space();
+    const rank = n.valueRank ?? -1;
+    if (n.dataType === typeBefore && rank === rankBefore) return;
+    const takesOld = !!typeBefore && !!n.dataType && space.isSubtypeOf(typeBefore, n.dataType);
+
+    if (n.arguments) {
+      if (n.dataType !== ARGUMENT) n.arguments = undefined;
+      return;
+    }
+    if (n.extensionObjects) {
+      const { items, list } = n.extensionObjects;
+      const typed = items.every(i => {
+        const type = space.in(i.typeId, HAS_ENCODING, false)[0]?.source;
+        return !!type && !!n.dataType && space.isSubtypeOf(type, n.dataType);
+      });
+      const asList = rank === 0 || rank === 1 ? true : rank === -1 ? false : rank < -1 ? list : undefined;
+      n.extensionObjects = typed && asList !== undefined && (asList || items.length === 1) ? { list: asList, items } : undefined;
+      return;
+    }
+    if (!n.valueXml?.trim()) return;
+    const value = valueElements(n, builtInOf(space, typeBefore));
+    if (!value) {
+      // A value the panel cannot read stays only where it still fits for certain.
+      if (!(takesOld && (rank === rankBefore || rank === -2))) n.valueXml = undefined;
+      return;
+    }
+    if (takesOld && rank === rankBefore) return;
+    const builtIn = builtInOf(space, n.dataType) ?? (takesOld ? builtInOf(space, typeBefore) : undefined);
+    const shaped = shapeFor(value, rank);
+    try {
+      n.valueXml = builtIn && shaped ? elementsXml(builtIn, shaped) : undefined;
+    } catch (e) {
+      if (!(e instanceof ValueError)) throw e;
+      n.valueXml = undefined;
+    }
+  }
+
+  /**
+   * Who may read and write a variable's value (AccessLevel, UserAccessLevel:
+   * bit 0 read, bit 1 write …), whether the server keeps its history
+   * (Historizing), and how fast it samples (MinimumSamplingInterval, in ms; -1
+   * for not known, 0 for continuously). A field left out stays; the defaults
+   * of the schema (1, 1, false, none) are not written.
+   */
+  setAccess(key: string, access: { accessLevel?: number; userAccessLevel?: number; historizing?: boolean; minimumSamplingInterval?: number }): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'Variable') throw new EditError(msg`Only a Variable has an AccessLevel.`);
+      const byte = (value: number | undefined) => {
+        if (value === undefined || !Number.isInteger(value) || value < 0 || value > 255) throw new EditError(msg`An access level is a number from 0 to 255.`);
+        return value;
+      };
+      if ('accessLevel' in access) {
+        const level = byte(access.accessLevel);
+        n.accessLevel = level === 1 ? undefined : level;
+      }
+      const attributes = { ...n.otherAttributes };
+      if ('userAccessLevel' in access) {
+        const level = byte(access.userAccessLevel);
+        if (level === 1) delete attributes.UserAccessLevel; else attributes.UserAccessLevel = String(level);
+      }
+      if ('historizing' in access) {
+        if (access.historizing) attributes.Historizing = 'true'; else delete attributes.Historizing;
+      }
+      if ('minimumSamplingInterval' in access) {
+        const interval = access.minimumSamplingInterval;
+        if (interval !== undefined && (!Number.isFinite(interval) || interval < -1)) {
+          throw new EditError(msg`A sampling interval is a number of milliseconds, -1 or more.`);
+        }
+        if (interval === undefined) delete attributes.MinimumSamplingInterval; else attributes.MinimumSamplingInterval = String(interval);
+      }
+      n.otherAttributes = attributes;
+    });
   }
 
   /** ReferenceType: a symmetric type has no InverseName. */
@@ -660,11 +788,21 @@ export class ModelEditor {
       }
     }
     const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
-    // What a field carries that the panel does not edit (MaxStringLength, ArrayDimensions …) stays with its name.
-    const kept = new Map((d.definition?.fields ?? []).map(f => [f.name, f.otherAttributes] as const));
+    // What a field carries that the panel does not edit (MaxStringLength, its
+    // DisplayName, its ArrayDimensions while it stays an array of the same
+    // rank …) stays with its name.
+    const kept = new Map((d.definition?.fields ?? []).map(f => [f.name, f] as const));
     const attributesOf = (f: FieldInput) => {
-      const { AllowSubTypes: _s, ...rest } = kept.get(f.name.trim()) ?? {};
+      const { AllowSubTypes: _s, ...rest } = kept.get(f.name.trim())?.otherAttributes ?? {};
       return { ...rest, ...(!numbered && f.allowSubTypes ? { AllowSubTypes: 'true' } : {}) };
+    };
+    const carried = (f: FieldInput) => {
+      const old = kept.get(f.name.trim());
+      const rank = f.valueRank ?? -1;
+      return {
+        displayName: old ? structuredClone(old.displayName) : [],
+        ...(!numbered && old?.arrayDimensions && rank >= 1 && (old.valueRank ?? -1) === rank ? { arrayDimensions: old.arrayDimensions } : {}),
+      };
     };
     d.definition = {
       name: d.browseName,
@@ -677,7 +815,7 @@ export class ModelEditor {
         name: f.name.trim(),
         ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
         description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
-        displayName: [],
+        ...carried(f),
         otherAttributes: attributesOf(f),
       })),
     };
@@ -792,9 +930,9 @@ export class ModelEditor {
       const t = this.machineType(type);
       const s = this.namedChild(t, name, 'Object', SM.TransitionType);
       this.numberProperty(s, SM.TransitionNumber, number);
-      this.transitionEnd(s, SM.FromState, from);
-      this.transitionEnd(s, SM.ToState, to);
-      if (cause) this.transitionEnd(s, SM.HasCause, cause);
+      this.transitionEnd(t, s, SM.FromState, from);
+      this.transitionEnd(t, s, SM.ToState, to);
+      if (cause) this.transitionEnd(t, s, SM.HasCause, cause);
       return s.id;
     });
   }
@@ -806,9 +944,10 @@ export class ModelEditor {
   setTransition(transition: string, ends: { from?: string; to?: string; cause?: string }): void {
     this.change(() => {
       const s = this.node(transition);
-      if ('from' in ends) this.transitionEnd(s, SM.FromState, ends.from);
-      if ('to' in ends) this.transitionEnd(s, SM.ToState, ends.to);
-      if ('cause' in ends) this.transitionEnd(s, SM.HasCause, ends.cause);
+      const machine = this.space().parentOf(s);
+      if ('from' in ends) this.transitionEnd(machine, s, SM.FromState, ends.from);
+      if ('to' in ends) this.transitionEnd(machine, s, SM.ToState, ends.to);
+      if ('cause' in ends) this.transitionEnd(machine, s, SM.HasCause, ends.cause);
     });
   }
 
@@ -852,8 +991,12 @@ export class ModelEditor {
     p.valueXml = valueXml('UInt32', String(Math.trunc(value)), false);
   }
 
-  /** One FromState, ToState or HasCause of a transition, with the inverse on the other node. */
-  private transitionEnd(transition: UaNode, type: string, target: string | undefined): void {
+  /**
+   * One FromState, ToState or HasCause of a transition, with the inverse on
+   * the other node. An end is a state of the transition's machine, its own or
+   * one it inherits.
+   */
+  private transitionEnd(machine: UaNode | undefined, transition: UaNode, type: string, target: string | undefined): void {
     for (const old of transition.references.filter(r => r.type === type && r.isForward)) {
       const node = this.file.nodes.find(n => n.id === old.target);
       if (node) node.references = node.references.filter(r => !(r.type === type && !r.isForward && r.target === transition.id));
@@ -862,7 +1005,7 @@ export class ModelEditor {
     if (!target) return;
     const node = this.space().get(target);
     if (!node) throw new EditError(msg`The node of the reference is unknown.`);
-    if (type !== SM.HasCause && !this.space().isSubtypeOf(node.references.find(r => r.type === REF.HasTypeDefinition)?.target ?? '', SM.StateType)) {
+    if (type !== SM.HasCause && !(machine && readStateMachine(this.space(), machine).states.some(s => s.key === target))) {
       throw new EditError(msg`'${node.browseName.name}' is no state of this machine.`);
     }
     if (type === SM.HasCause && node.nodeClass !== 'Method') throw new EditError(msg`'${node.browseName.name}' is no method.`);
@@ -1055,6 +1198,7 @@ export class ModelEditor {
       c.valueRank = d.valueRank;
       c.arrayDimensions = d.arrayDimensions;
       c.accessLevel = d.accessLevel;
+      for (const name of ACCESS_ATTRIBUTES) if (d.otherAttributes[name] !== undefined) c.otherAttributes[name] = d.otherAttributes[name];
       c.valueXml = d.valueXml;
       c.arguments = d.arguments ? structuredClone(d.arguments) : undefined;
       c.extensionObjects = d.extensionObjects ? structuredClone(d.extensionObjects) : undefined;
@@ -1184,6 +1328,16 @@ export class ModelEditor {
     return this.change(() => {
       const root = this.node(key);
       const doomed = this.ownedSubtree(root);
+      // The machine a state holds is a component of the machine type, not of
+      // the state (HasSubStateMachine); it goes with the state, with what it holds.
+      for (const pending = [...doomed]; pending.length > 0;) {
+        for (const e of this.space().out(pending.pop()!, SM.HasSubStateMachine, false)) {
+          if (!this.owns(e.target) || doomed.has(e.target)) continue;
+          for (const k of this.ownedSubtree(this.node(e.target))) {
+            if (!doomed.has(k)) { doomed.add(k); pending.push(k); }
+          }
+        }
+      }
       // A DataType's encodings go with it.
       for (const key of [...doomed]) {
         for (const e of this.space().out(key, HAS_ENCODING, false)) if (this.owns(e.target)) doomed.add(e.target);
@@ -1191,9 +1345,36 @@ export class ModelEditor {
       if (this.file.nodes.some(n => !doomed.has(n.id) && n.references.some(r => r.type === REF.HasSubtype && !r.isForward && doomed.has(r.target)))) {
         throw new EditError(msg`'${root.browseName.name}' has subtypes; delete or move them first.`);
       }
+      this.refuseDataTypeInUse(doomed);
       this.removeNodes(doomed);
       return [...doomed];
     });
+  }
+
+  /**
+   * A DataType is named by attributes (of a variable, an argument, a field),
+   * not by references, so deleting it would leave them pointing nowhere.
+   * Refuses that, naming who still uses it.
+   */
+  private refuseDataTypeInUse(doomed: Set<string>): void {
+    const users: string[] = [];
+    let used: UaNode | undefined;
+    const names = (dataType: string | undefined) => {
+      if (!dataType || !doomed.has(dataType)) return false;
+      used ??= this.file.nodes.find(x => x.id === dataType);
+      return true;
+    };
+    for (const n of this.file.nodes) {
+      if (doomed.has(n.id)) continue;
+      if (names(n.dataType)) users.push(n.browseName.name);
+      // An argument belongs to its method, which the user knows by name.
+      if ((n.arguments ?? []).some(a => names(a.dataType))) users.push(this.space().parentOf(n)?.browseName.name ?? n.browseName.name);
+      if ((n.definition?.fields ?? []).some(f => names(f.dataType))) users.push(n.browseName.name);
+    }
+    if (users.length === 0 || !used) return;
+    throw new EditError(users.length === 1
+      ? msg`'${used.browseName.name}' is the DataType of '${users[0]}'; give it another DataType first.`
+      : msg`'${used.browseName.name}' is the DataType of '${users[0]}' and ${users.length - 1} more; give them another DataType first.`);
   }
 
   /** A node and what it holds as its own (its ParentNodeId), not what it merely organizes. */

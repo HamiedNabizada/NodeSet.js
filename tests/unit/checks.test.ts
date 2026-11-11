@@ -93,6 +93,36 @@ describe('Rules on the NodeSet itself', () => {
     e.setInverseName(reference, 'RunsWith');
     expect(rules()).toContain('M018');
   });
+
+  it('finds a DataType that is unknown or no DataType (M025)', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Rules/');
+    const e = ws.editor!;
+    const type = e.addType('ObjectType', 'PumpType');
+    const speed = e.addDeclaration(type, 'Variable', 'Speed');
+    const data = e.addType('DataType', 'SettingsType');
+    e.setFields(data, [{ name: 'A', dataType: uaKey(11) }]);
+    const m025 = () => check(ws.space, ws.editable!).filter(f => f.rule === 'M025').map(f => f.message);
+    expect(m025()).toEqual([]);
+
+    // As a file can hold it; the editor itself refuses both.
+    ws.editable!.nodes.find(n => n.id === speed)!.dataType = 'http://example.org/Rules/|i=4711';
+    ws.editable!.nodes.find(n => n.id === data)!.definition!.fields[0].dataType = type;
+    e.rename(type, 'PumpType');
+
+    expect(m025()).toEqual([
+      "Speed: its DataType http://example.org/Rules/|i=4711 is unknown.",
+      "SettingsType: the field 'A' names PumpType, a ObjectType, as its DataType.",
+    ]);
+  });
+
+  it('finds no DataType out of place in the base model and DI (M025)', async () => {
+    for (const name of ['Opc.Ua.NodeSet2.xml', 'Opc.Ua.Di.NodeSet2.xml']) {
+      const ws = new Workspace();
+      await ws.open(readFileSync(join(__dirname, '../../assets/nodesets', name), 'utf8'));
+      expect(check(ws.space, ws.editable!).filter(f => f.rule === 'M025').map(f => f.message)).toEqual([]);
+    }
+  });
 });
 
 describe('Checks against real models', () => {

@@ -66,6 +66,68 @@ test('keeps the model through a failure of the modeler, to save it and to go on 
   await expect(typeList(page).filter({ hasText: 'ValveType' })).toHaveCount(1);
 });
 
+// DI loaded beside the open DI sample counted every reference twice, and the
+// diagram of DeviceType then took the modeler down.
+test('does not load the open model a second time', async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open DI sample' }).click();
+  await expect(page.locator('.status')).toContainText('nodes of http://opcfoundation.org/UA/DI/');
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Load DI/ })).toHaveCount(0);
+
+  await page.locator('.button-like input[type=file]').setInputFiles(join(__dirname, '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml'));
+  await expect(page.locator('.status')).toContainText('adds no model');
+  await typeList(page).filter({ hasText: /^DeviceType$/ }).click();
+  await expect(page.locator('.editor h3')).toContainText('DeviceType');
+  await expect(page.locator('.djs-shape')).not.toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+// Moving a shape changes no node: no checks, but an unsaved change all the same.
+test('keeps where a shape was moved to, as an unsaved change, and lays the diagram out anew', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openNodeSet(page, fixture);
+  await typeList(page).first().click();
+  const shape = page.locator('.djs-shape').first();
+  const before = await shape.boundingBox();
+  await page.mouse.move(before!.x + 40, before!.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(before!.x + 140, before!.y + 120, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+  await expect.poll(async () => (await page.locator('.djs-shape').first().boundingBox())!.x).toBeGreaterThan(before!.x + 50);
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Save NodeSet/ }).click()]);
+  expect(await readFile(await download.path(), 'utf8')).toContain('<UANodeSet');
+  await expect(page.getByRole('button', { name: 'Save NodeSet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reset layout' }).click();
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+  await expect.poll(async () => Math.round((await page.locator('.djs-shape').first().boundingBox())!.x)).toBe(Math.round(before!.x));
+  expect(errors).toEqual([]);
+});
+
+test('exports the diagram shown as an SVG picture of its own', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open DI sample' }).click();
+  await expect(page.locator('.status')).toContainText('nodes of http://opcfoundation.org/UA/DI/');
+  await typeList(page).filter({ hasText: /^DeviceType$/ }).click();
+  await page.locator('.djs-shape', { hasText: 'SerialNumber' }).first().click();
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export SVG' }).click()]);
+  expect(download.suggestedFilename()).toBe('DeviceType.svg');
+  const svg = await readFile(await download.path(), 'utf8');
+  expect(svg).toMatch(/^<\?xml[^>]*\?>\s*<svg xmlns="http:\/\/www.w3.org\/2000\/svg"[^>]* viewBox="/);
+  for (const name of ['DeviceType', 'ComponentType', 'SerialNumber']) expect(svg).toContain(`>${name}<`);
+  // What the canvas adds for editing stays behind: the outline of the selection, the hit areas.
+  expect(svg).not.toMatch(/djs-outline|djs-hit|selected/);
+  // It is a picture a browser shows on its own.
+  await page.setContent(svg.replace(/^<\?xml[^>]*\?>/, ''));
+  const box = await page.locator('svg').boundingBox();
+  expect(box!.width).toBeGreaterThan(200);
+});
+
 test('counts an edit that made the modeler fail as unsaved', async ({ page }) => {
   await openNodeSet(page, fixture);
   await breakSorting(page);

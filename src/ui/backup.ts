@@ -55,7 +55,7 @@ export function browserStore(name = 'nodeset-js'): DraftStore | undefined {
       const request = work(transaction.objectStore('drafts'));
       transaction.oncomplete = () => resolve(request ? request.result : undefined);
       transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error ?? new Error('The browser did not store the draft.'));
+      transaction.onabort = () => reject(transaction.error ?? new Error(t('The browser did not store the draft.')));
     }));
   return {
     list: async () => (await run<Draft[]>('readonly', store => store.getAll())) ?? [],

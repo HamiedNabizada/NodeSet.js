@@ -9,18 +9,24 @@
 // "save" asks the host to write the NodeSet to a file of the user's choice,
 // answered by "saved". "theme" tells the modeler whether the host is light or
 // dark.
+//
+// The page stays editable while the host imports or saves. "apply" and "save"
+// therefore carry "change", the number of the last change the NodeSet holds,
+// and a host that echoes it in "applied" or "saved" lets the modeler count the
+// model as unchanged only when nothing was changed since. A host that does not
+// echo it (before 0.2.1) is taken at its word, as before.
 
 export type HostToModeler =
   | { type: 'open'; name: string; xml: string; required?: string[] }
   | { type: 'new'; modelUri: string; required?: string[] }
   | { type: 'theme'; dark: boolean }
-  | { type: 'applied'; ok: boolean; text: string }
-  | { type: 'saved'; ok: boolean; text: string };
+  | { type: 'applied'; ok: boolean; text: string; change?: number }
+  | { type: 'saved'; ok: boolean; text: string; change?: number };
 
 export type ModelerToHost =
   | { type: 'ready'; version: string }
-  | { type: 'apply'; xml: string; modelUri: string }
-  | { type: 'save'; xml: string; name: string }
+  | { type: 'apply'; xml: string; modelUri: string; change: number }
+  | { type: 'save'; xml: string; name: string; change: number }
   | { type: 'dirty'; dirty: boolean }
   | { type: 'status'; text: string; warn?: boolean };
 
@@ -52,6 +58,14 @@ export class HostBridge {
     this.webview.addEventListener('message', listener);
     return () => this.webview.removeEventListener('message', listener);
   }
+}
+
+/**
+ * Whether a reply of the host ("applied", "saved") leaves nothing unsaved: it
+ * worked, and it took the last change, or does not say which it took.
+ */
+export function savesAll(reply: { ok: boolean; change?: number }, change: number): boolean {
+  return reply.ok && (typeof reply.change !== 'number' || reply.change === change);
 }
 
 function safeParse(s: string): unknown {

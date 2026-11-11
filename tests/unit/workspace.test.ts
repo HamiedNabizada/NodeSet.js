@@ -1,3 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { buildTypeDiagram } from '../../src/modeler/diagram-model';
+import { AddressSpace } from '../../src/nodeset/address-space';
+import { newModel } from '../../src/nodeset/edit';
+import { readNodeSet } from '../../src/nodeset/reader';
 import { Workspace } from '../../src/workspace';
 
 const PUMPS = 'http://example.org/Pumps/';
@@ -74,5 +80,42 @@ describe('Workspace', () => {
     expect(missing).toEqual([]);
     expect(again.space.typeChain(again.space.get(valve)!).map(t => t.browseName.name)).toContain('DeviceType');
     expect(again.layout.get(valve)?.get(valve)).toEqual({ x: 40, y: 80 });
+  });
+
+  // Opening the DI sample and then loading DI loaded the edited model a second
+  // time: every reference counted twice, and the diagram of DeviceType gave
+  // diagram-js one id twice, which took the modeler down.
+  it('does not load the model being edited a second time', async () => {
+    const di = readFileSync(join(__dirname, '../../assets/nodesets/Opc.Ua.Di.NodeSet2.xml'), 'utf8');
+    const usesDi = nodeSet(DI).replace(/Pumps/g, 'UsesDi');
+    const ws = new Workspace();
+    await ws.open(di);
+
+    await ws.addBundled(DI);
+    expect(await ws.addRequired(di)).toEqual([]);
+    expect(await ws.addRequired(usesDi)).toEqual([]);
+
+    expect(ws.loadedModels.map(m => m.modelUri)).not.toContain(DI);
+    expect(ws.space.files.filter(f => f.file.models.some(m => m.modelUri === DI))).toHaveLength(1);
+    const diagram = buildTypeDiagram(ws.space, `${DI}|i=1002`, { ownNamespaces: ws.ownNamespaces });
+    const ids = [...diagram.shapes.map(s => s.id), ...diagram.lines.map(l => l.id)];
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+  });
+
+  it('counts a reference once even when two loaded files hold the same node', async () => {
+    const file = newModel(PUMPS);
+    file.nodes.push({
+      id: `${PUMPS}|i=1000`, nodeClass: 'ObjectType', browseName: { namespaceUri: PUMPS, name: 'PumpType' }, displayName: [], description: [],
+      references: [{ type: 'http://opcfoundation.org/UA/|i=45', isForward: false, target: 'http://opcfoundation.org/UA/|i=58' }],
+      otherAttributes: {}, otherElements: [],
+    });
+    const base = new AddressSpace();
+    base.load(readNodeSet(readFileSync(join(__dirname, '../../assets/nodesets/Opc.Ua.NodeSet2.xml'), 'utf8')));
+    base.load(file);
+    const space = new AddressSpace(base);
+    space.load(structuredClone(file), true);
+
+    expect(space.in(`${PUMPS}|i=1000`)).toHaveLength(1);
+    expect(space.out('http://opcfoundation.org/UA/|i=58').filter(e => e.target === `${PUMPS}|i=1000`)).toHaveLength(1);
   });
 });

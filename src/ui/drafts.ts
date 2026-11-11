@@ -3,10 +3,11 @@
 // the sections register theirs here, and the app asks before leaving them.
 
 import { useEffect } from 'react';
+import { t } from './i18n';
 
 const pending = new Set<string>();
 
-/** Registers a section's draft while it differs from the model. */
+/** Registers a section's draft while it differs from the model, by the name the question shows (translated). */
 export function useDraft(name: string, changed: boolean): void {
   useEffect(() => {
     if (changed) pending.add(name);
@@ -24,7 +25,7 @@ export function pendingDrafts(): string[] {
 export function mayLeaveDrafts(ask: (message: string) => boolean = m => window.confirm(m)): boolean {
   const names = pendingDrafts();
   if (names.length === 0) return true;
-  if (!ask(`${names.join(', ')}: changes not applied yet. Drop them?`)) return false;
+  if (!ask(t('{0}: changes not applied yet. Drop them?', names.join(', ')))) return false;
   pending.clear();
   return true;
 }

@@ -3,15 +3,16 @@
 // hierarchy. Arguments, fields and structure values are edited as a draft
 // and applied as one undo step.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useDraft } from './drafts';
 import { isStateMachineType, MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
-import { Argument, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
+import { Argument, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
 import { insideType } from '../nodeset/checks';
 import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
+import { cardinality } from '../modeler/diagram-model';
 import { t } from './i18n';
 
 type Run = (action: () => unknown) => void;
@@ -35,7 +36,8 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   const currentKey = JSON.stringify(current);
   useEffect(() => setDraft(current), [currentKey]);
   const changed = JSON.stringify(draft) !== currentKey;
-  useDraft(`${which} arguments`, changed);
+  // The name the question before leaving shows.
+  useDraft(which === 'Input' ? t('Input arguments') : t('Output arguments'), changed);
   const update = (i: number, patch: Partial<Argument>) => setDraft(d => d.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
   return (
@@ -86,7 +88,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   useEffect(() => setDraft(current), [currentKey]);
   const changed = !!kind && fieldsKey(draft) !== currentKey;
   // Before the return below: a DataType without fields calls no fewer hooks than one with.
-  useDraft('Fields', changed);
+  useDraft(t('Fields'), changed);
   if (!kind) return null;
   const [legend, noun] = fieldLegends()[kind];
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
@@ -97,7 +99,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
       {draft.map((f, i) => (
         <div className={`row${isEnum ? '' : ' item-row'}`} key={i}>
           {isEnum && (
-            <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? 'Bit' : 'Value'}
+            <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? t('Bit') : t('Value')}
               onChange={e => update(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })} />
           )}
           <input placeholder={t('Name')} value={f.name} onChange={e => update(i, { name: e.target.value })} />
@@ -147,7 +149,7 @@ export function StructureValueSection({ space, editor, node, shape, current, own
   const [draft, setDraft] = useState<StructValue[]>(JSON.parse(currentJson));
   useEffect(() => setDraft(JSON.parse(currentJson)), [currentJson]);
   const changed = JSON.stringify(draft) !== currentJson;
-  useDraft('Value', changed);
+  useDraft(t('Value'), changed);
   const set = (i: number, v: StructValue) => setDraft(d => d.map((x, j) => (j === i ? v : x)));
 
   return (
@@ -217,7 +219,7 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
             <div className="row struct-row" key={f.name}>
               <span title={typeTitle(space, f)}>{f.name}</span>
               <label className="struct-optional">
-                <input type="checkbox" checked={false} disabled={disabled} onChange={() => setField(f.name, emptyField(space, f, depth))} /> optional, not set
+                <input type="checkbox" checked={false} disabled={disabled} onChange={() => setField(f.name, emptyField(space, f, depth))} /> {t('optional, not set')}
               </label>
             </div>
           );
@@ -235,7 +237,7 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
 
 function typeTitle(space: AddressSpace, f: FieldShape): string {
   const type = f.kind === 'builtIn' ? f.builtIn! : space.get(f.dataType)?.browseName.name ?? '';
-  return `${type}${f.array ? '[]' : ''}${f.optional ? ', optional' : ''}`;
+  return `${type}${f.array ? '[]' : ''}${f.optional ? `, ${t('optional')}` : ''}`;
 }
 
 /** One field: a text for built-in values, a list for enumerations, nested fields for structures; arrays of each. */
@@ -331,7 +333,18 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
     .filter(n => isStateMachineType(space, n) && n.browseName.namespaceUri !== UA_NAMESPACE && n.id !== type.id && !space.isSubtypeOf(n.id, type.id))
     .sort((a, b) => (text(a.displayName) || a.browseName.name).localeCompare(text(b.displayName) || b.browseName.name)), [space, type]);
   const [holder, setHolder] = useState('');
+  // The transition whose ends and cause are open for change.
+  const [editing, setEditing] = useState<string>();
   const chosen = machine.states.find(s => s.key === holder) ?? machine.states[0];
+  // The form empties only once the model took the state or transition; a refusal leaves it to correct.
+  const addState = () => run(() => {
+    editor.addState(type.id, state.trim(), nextNumber(machine.states));
+    setState('');
+  });
+  const addTransition = () => run(() => {
+    editor.addTransition(type.id, transition.name.trim(), nextNumber(machine.transitions), transition.from, transition.to, transition.cause || undefined);
+    setTransition({ name: '', from: '', to: '', cause: '' });
+  });
 
   return (
     <fieldset className="add">
@@ -367,8 +380,8 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
       )}
       <div className="row">
         <input placeholder={t('New state')} value={state} onChange={e => setState(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && state.trim()) { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); } }} />
-        <button disabled={!state.trim()} onClick={() => { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); }}>{t('Add state')}</button>
+          onKeyDown={e => { if (e.key === 'Enter' && state.trim()) addState(); }} />
+        <button disabled={!state.trim()} onClick={addState}>{t('Add state')}</button>
       </div>
 
       {machine.transitions.length > 0 && (
@@ -378,7 +391,27 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
             <li key={tr.key}>
               <button className="link" onClick={() => onSelect(tr.key)}>{tr.name}</button>
               <span className="ends">{ends(machine, tr)}{tr.causeName ? ` / ${tr.causeName}()` : ''}</span>
+              {editor.owns(tr.key) && (
+                <button title={t('Change ends and cause')} onClick={() => setEditing(k => (k === tr.key ? undefined : tr.key))}>✎</button>
+              )}
               <button title={t('Remove')} onClick={() => run(() => editor.delete(tr.key))}>×</button>
+              {/* Each change is a step of its own; ends must be states of this machine. */}
+              {editing === tr.key && (
+                <div className="row wrap">
+                  <select value={tr.from ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { from: e.target.value || undefined }))}>
+                    <option value="">{t('from …')}</option>
+                    {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                  </select>
+                  <select value={tr.to ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { to: e.target.value || undefined }))}>
+                    <option value="">{t('to …')}</option>
+                    {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                  </select>
+                  <select value={tr.cause ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { cause: e.target.value || undefined }))}>
+                    <option value="">{t('caused by …')}</option>
+                    {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
+                  </select>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -398,14 +431,7 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
             <option value="">{t('caused by …')}</option>
             {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
           </select>
-          <button
-            disabled={!transition.name.trim() || !transition.from || !transition.to}
-            onClick={() => {
-              run(() => editor.addTransition(type.id, transition.name.trim(), nextNumber(machine.transitions), transition.from, transition.to,
-                transition.cause || undefined));
-              setTransition({ name: '', from: '', to: '', cause: '' });
-            }}
-          >{t('Add transition')}</button>
+          <button disabled={!transition.name.trim() || !transition.from || !transition.to} onClick={addTransition}>{t('Add transition')}</button>
         </div>
       )}
       {chart && (
@@ -432,10 +458,6 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
   const [type, setType] = useState<string>();
   const [target, setTarget] = useState<string>();
   const name = (key: string) => { const n = space.get(key); return n ? text(n.displayName) || n.browseName.name : key; };
-  const targets = useMemo(() => editor.file.nodes
-    .filter(n => n.id !== node.id)
-    .map(n => ({ key: n.id, label: pathOf(space, n) }))
-    .sort((a, b) => a.label.localeCompare(b.label)), [space, editor.file, node.id]);
 
   return (
     <fieldset className="add">
@@ -449,18 +471,110 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
       ))}
       <TypePicker space={space} nodeClass="ReferenceType" value={type} onPick={setType} placeholder={t('ReferenceType …')} />
       <div className="row">
-        <select value={target ?? ''} onChange={e => setTarget(e.target.value || undefined)}>
-          <option value="">{t('Target …')}</option>
-          {targets.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-        </select>
+        <NodePicker space={space} exclude={node.id} onPick={setTarget} placeholder={t('Target …')} />
         <button disabled={!type || !target} onClick={() => run(() => editor.addReference(node.id, type!, target!))}>{t('Add')}</button>
       </div>
     </fieldset>
   );
 }
 
+/** At most this many nodes are offered; more letters narrow them. */
+const MAX_MATCHES = 50;
+
+/**
+ * Picks any node of the loaded models by name: from two letters on, the
+ * nodes whose name holds them are offered with their path and model, the
+ * model's own first. The list is built as you type, not for every node.
+ */
+function NodePicker({ space, exclude, onPick, placeholder }: {
+  space: AddressSpace; exclude?: string; onPick: (key: string | undefined) => void; placeholder?: string;
+}) {
+  const [value, setValue] = useState('');
+  const [query, setQuery] = useState('');
+  // React's ids hold colons, which a selector for the list does not take.
+  const listId = `nodes-${useId().replace(/[^\w-]/g, '')}`;
+  const nodes = useMemo(() => [...space.all()].map(n => ({ n, name: labelOf(n).toLowerCase(), browse: n.browseName.name.toLowerCase() })), [space]);
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    const own = (n: UaNode) => (space.fileOf(n.id)?.editable ? 0 : 1);
+    const starts = (n: UaNode) => (labelOf(n).toLowerCase().startsWith(needle) ? 0 : 1);
+    const hits = nodes.filter(x => x.n.id !== exclude && (x.name.includes(needle) || x.browse.includes(needle))).map(x => x.n);
+    hits.sort((a, b) => own(a) - own(b) || starts(a) - starts(b) || labelOf(a).length - labelOf(b).length || labelOf(a).localeCompare(labelOf(b)));
+    const options = hits.slice(0, MAX_MATCHES)
+      .map(n => ({ key: n.id, label: `${pathOf(space, n)} (${modelName(parseNodeIdKey(n.id).namespaceUri)})` }));
+    // Two nodes of one path and model are told apart by their NodeId.
+    const count = new Map<string, number>();
+    for (const o of options) count.set(o.label, (count.get(o.label) ?? 0) + 1);
+    return options.map(o => (count.get(o.label)! > 1 ? { ...o, label: `${o.label} ${parseNodeIdKey(o.key).identifier}` } : o));
+  }, [nodes, query, exclude, space]);
+
+  const change = (typed: string) => {
+    setValue(typed);
+    const hit = matches.find(m => m.label === typed);
+    if (hit) { onPick(hit.key); return; }
+    setQuery(typed);
+    onPick(undefined);
+  };
+  return (
+    <>
+      <input list={listId} value={value} placeholder={placeholder} title={t('Type two letters or more of the name; any loaded model.')}
+        onChange={e => change(e.target.value)} />
+      <datalist id={listId}>{matches.map(m => <option key={m.key} value={m.label} />)}</datalist>
+    </>
+  );
+}
+
+function labelOf(n: UaNode): string {
+  return text(n.displayName) || n.browseName.name;
+}
+
+/**
+ * What a type gets from its supertypes and does not declare itself, by the
+ * type it comes from, the nearest first: shown, not edited. A click shows the
+ * declaration in the panel. A declaration of the type that overrides one of a
+ * supertype (the same BrowseName and namespace) hides it.
+ */
+export function InheritedSection({ space, type, onSelect }: { space: AddressSpace; type: UaNode; onSelect: (key: string) => void }) {
+  const groups = useMemo(() => {
+    const seen = new Set(space.children(type).map(c => `${c.node.browseName.namespaceUri}|${c.node.browseName.name}`));
+    const result: { from: UaNode; items: UaNode[] }[] = [];
+    for (const t of space.typeChain(type).slice(1)) {
+      const items: UaNode[] = [];
+      for (const { node } of space.children(t)) {
+        const name = `${node.browseName.namespaceUri}|${node.browseName.name}`;
+        if (seen.has(name)) continue;
+        seen.add(name);
+        items.push(node);
+      }
+      if (items.length > 0) result.push({ from: t, items });
+    }
+    return result;
+  }, [space, type]);
+  if (groups.length === 0) return null;
+  return (
+    <fieldset className="add">
+      <legend>{t('Inherited')}</legend>
+      {groups.map(g => (
+        <details key={g.from.id} open={groups.length === 1}>
+          <summary>{labelOf(g.from)} ({g.items.length})</summary>
+          <ul className="inherited">
+            {g.items.map(n => (
+              <li key={n.id}>
+                <button className="link" onClick={() => onSelect(n.id)}>{labelOf(n)}</button>
+                <span className="note"> {n.nodeClass} {cardinality(space.modellingRule(n)) ?? ''}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </fieldset>
+  );
+}
+
 /** Creates an instance of a type: a name and the Optional declarations to include. */
 const OBJECTS = uaKey(85);
+const DATA_TYPE_ENCODING = uaKey(76);
 
 /** The last part of a model URI: DI for http://opcfoundation.org/UA/DI/. */
 function modelName(uri: string): string {
@@ -483,7 +597,7 @@ function placeName(space: AddressSpace, n: UaNode): string {
  * there for others to fill (DI's DeviceSet, say), and the model's own
  * instances. The base model's objects (Server and the like) are left out.
  */
-function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
+export function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
   const places = [{ key: '', label: t('Objects folder') }];
   const objects = space.get(OBJECTS);
   for (const c of objects ? space.children(objects) : []) {
@@ -492,7 +606,9 @@ function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string
     places.push({ key: n.id, label: `${text(n.displayName) || n.browseName.name} (${modelName(n.browseName.namespaceUri)})` });
   }
   for (const n of editor.file.nodes) {
-    if (n.nodeClass === 'Object' && !insideType(space, n)) places.push({ key: n.id, label: placeName(space, n) });
+    // Not the encodings of a DataType: Objects too, but outside the hierarchy and of no use as a place.
+    const encoding = space.isSubtypeOf(space.typeDefinition(n)?.id ?? '', DATA_TYPE_ENCODING);
+    if (n.nodeClass === 'Object' && !encoding && space.parentOf(n) && !insideType(space, n)) places.push({ key: n.id, label: placeName(space, n) });
   }
   return places;
 }

@@ -62,6 +62,22 @@ describe('Finite state machines', () => {
     expect(() => e.addState('http://example.org/Machine/|i=9999', 'X', 1)).toThrow(EditError);
   });
 
+  // A form left filled for one machine reached the next: its states belong to another machine.
+  it('refuses a state of another machine as an end, also when an end changes', async () => {
+    const { ws, e, type, idle, toRunning } = await machine();
+    const other = e.addStateMachineType('ValveStateMachineType');
+    const open = e.addState(other, 'Open', 1);
+
+    expect(() => e.addTransition(type, 'IdleToOpen', 2, idle, open)).toThrow(/no state of this machine/);
+    expect(() => e.setTransition(toRunning, { to: open })).toThrow(/no state of this machine/);
+    expect(readStateMachine(ws.space, ws.space.get(type)!).transitions.map(t => t.name)).toEqual(['IdleToRunning']);
+
+    // A state the machine inherits is one of its own.
+    const sub = e.addType('ObjectType', 'SpecialPumpStateMachineType', type);
+    const special = e.addState(sub, 'Special', 3);
+    expect(() => e.addTransition(sub, 'IdleToSpecial', 2, idle, special)).not.toThrow();
+  });
+
   it('finds a transition without ends and numbers given twice', async () => {
     const { ws, e, type, idle, running } = await machine();
     const loose = e.addTransition(type, 'Loose', 2, idle, running);
@@ -144,6 +160,21 @@ describe('Sub-state machines', () => {
     expect(state().subMachine).toBeUndefined();
     expect(ws.space.get(replaced)).toBeUndefined();
     expect(ws.editable!.nodes.flatMap(n => n.references).some(r => r.target === replaced)).toBe(false);
+  });
+
+  // The machine a state held stayed behind, a component of the type nothing explained.
+  it('deletes the machine a state holds along with the state, and undo brings both back', async () => {
+    const { ws, e, main, running, sub } = await machines();
+    const object = e.setSubStateMachine(main, running, sub)!;
+
+    const gone = e.delete(running);
+
+    expect(gone).toContain(object);
+    expect(ws.space.get(object)).toBeUndefined();
+    expect(ws.space.children(ws.space.get(main)!).map(c => c.node.browseName.name)).not.toContain('RunningStateMachine');
+    e.undo();
+    expect(ws.space.get(object)?.browseName.name).toBe('RunningStateMachine');
+    expect(ws.space.get(running)).toBeDefined();
   });
 
   it('marks a state that holds a machine in the chart, with the type of that machine', async () => {

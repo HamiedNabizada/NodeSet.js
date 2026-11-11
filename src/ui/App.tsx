@@ -1,20 +1,23 @@
 import { MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeSetModeler } from '../modeler/Modeler';
-import { REF, RULE } from '../nodeset/address-space';
+import { RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { check, Finding, RULES } from '../nodeset/checks';
-import { EditError } from '../nodeset/edit';
-import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
-import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
+import { EditError, TYPE_DEFAULTS } from '../nodeset/edit';
+import { NodeClass, text, UaNode } from '../nodeset/model';
+import { applyTheme, HostBridge, HostToModeler, savesAll } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
 import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
+import { useIdle } from './idle';
+import { keyPlace, shortcut } from './keys';
+import { topInstances } from './instances';
 import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
-import { NodeEditor } from './NodeEditor';
+import { NodeEditor, typeOptions } from './NodeEditor';
 
 const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType'; title: string }[] = [
   { nodeClass: 'ObjectType', title: 'ObjectTypes' },
@@ -28,12 +31,12 @@ type Status = { text: string; warn?: boolean };
 /** Told to the host in "ready". */
 const VERSION = '0.2.0';
 
-const OBJECTS = uaKey(85);
-
 /** What is open, kept outside the modeler so that a failure of the modeler does not take it along. */
 interface Kept {
   workspace?: Workspace;
   dirty: boolean;
+  /** Counts the changes; "apply" and "save" tell the host the last one, and its reply names the one it took. */
+  change: number;
 }
 
 /** What the modeler receives from outside while it lives; kept for it while it has failed. */
@@ -55,10 +58,10 @@ function fileName(workspace: Workspace): string {
 }
 
 /** Saves the model: through the host's save dialog when there is a host, else as a download. */
-function saveModel(workspace: Workspace, host: HostBridge | undefined): string {
+function saveModel(workspace: Workspace, host: HostBridge | undefined, change: number): string {
   const name = fileName(workspace);
   if (host) {
-    host.post({ type: 'save', xml: workspace.save(), name });
+    host.post({ type: 'save', xml: workspace.save(), name, change });
     return name;
   }
   const a = document.createElement('a');
@@ -74,7 +77,7 @@ function saveModel(workspace: Workspace, host: HostBridge | undefined): string {
  * message offers to save it and to start the modeler again with it.
  */
 export function App() {
-  const kept = useRef<Kept>({ dirty: false });
+  const kept = useRef<Kept>({ dirty: false, change: 0 });
   // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
   const host = useMemo(() => HostBridge.detect(), []);
   const [dirty, setDirty] = useState(false);
@@ -95,7 +98,7 @@ export function App() {
       if (message.type === 'theme') applyTheme(message.dark);
       else if (inbox.current.host) inbox.current.host(message);
       else if (message.type === 'open' || message.type === 'new') inbox.current.pending = message;
-      else if (message.ok) {
+      else if (savesAll(message, kept.current.change)) {
         kept.current = { ...kept.current, dirty: false };
         setDirty(false);
       }
@@ -125,7 +128,7 @@ export function App() {
   const rescue = () => {
     const workspace = kept.current.workspace;
     if (!workspace?.editable) return null;
-    return <button onClick={() => saveModel(workspace, host)}>{t('Save NodeSet')}</button>;
+    return <button onClick={() => saveModel(workspace, host, kept.current.change)}>{t('Save NodeSet')}</button>;
   };
 
   return (
@@ -170,14 +173,23 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   // The canvas outlives renders; it reaches the current edit function through a ref.
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
+  // Where shapes stand changes no node: the diagram is drawn anew, the checks and the lists stay.
+  const [layoutRevision, setLayoutRevision] = useState(0);
   const bump = useCallback(() => setRevision(r => r + 1), []);
-  const changed = useCallback(() => {
-    setRevision(r => r + 1);
+  const unsaved = useCallback(() => {
     setDirty(true);
     // At once, not after the next render: that render may be the one that fails.
-    kept.current = { ...kept.current, dirty: true };
+    kept.current = { ...kept.current, dirty: true, change: kept.current.change + 1 };
     onDirty(true);
   }, [kept, onDirty]);
+  const changed = useCallback(() => {
+    setRevision(r => r + 1);
+    unsaved();
+  }, [unsaved]);
+  const layoutChanged = useCallback(() => {
+    setLayoutRevision(r => r + 1);
+    unsaved();
+  }, [unsaved]);
 
   /** Opens or starts a model; false when that failed, which the status line then says. */
   const start = useCallback(async (action: (ws: Workspace) => Promise<unknown>, name: string, required: string[] = []) => {
@@ -187,7 +199,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       await action(ws);
       for (const xml of required) await ws.addRequired(xml);
       const missing = ws.missing;
-      kept.current = { workspace: ws, dirty: false };
+      kept.current = { ...kept.current, workspace: ws, dirty: false };
       setWorkspace(ws);
       setDirty(false);
       setShown(undefined);
@@ -275,19 +287,19 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     changed();
   }, [workspace, changed]);
 
-  /** Another node, once its unapplied drafts may go. */
+  /** Another node, once its unapplied drafts may go; staying on the node asks nothing. */
   const select = useCallback((key: string | undefined, show?: string) => {
-    if (!mayLeaveDrafts()) return;
+    if (key !== selectedRef.current && !mayLeaveDrafts()) return;
     if (show !== undefined) setShown(show);
     setSelected(key);
   }, []);
 
-  // The model counts as unchanged once the host reports it imported ("applied").
+  // The model counts as unchanged once the host reports it imported ("applied"), unless it was changed meanwhile.
   const apply = useCallback(() => {
     if (!host || !workspace?.editable || !mayLeaveDrafts()) return;
-    host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '' });
+    host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '', change: kept.current.change });
     setStatus({ text: t('Applying to the document …') });
-  }, [host, workspace]);
+  }, [host, workspace, kept]);
 
   // Messages from the host, through App; one that came while the modeler had failed comes first.
   useEffect(() => {
@@ -296,8 +308,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
       if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
       if (m.type === 'applied' || m.type === 'saved') {
-        if (m.ok) setDirty(false);
-        setStatus({ text: m.text, warn: !m.ok });
+        const all = savesAll(m, kept.current.change);
+        if (all) setDirty(false);
+        const later = m.type === 'applied' ? t('{0} Changes made since then are not applied yet.', m.text) : t('{0} Changes made since then are not saved yet.', m.text);
+        setStatus({ text: m.ok && !all ? later : m.text, warn: !m.ok });
       }
     };
     const box = inbox.current;
@@ -307,10 +321,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       box.pending = undefined;
     }
     return () => { box.host = undefined; };
-  }, [host, start, inbox]);
+  }, [host, start, inbox, kept]);
 
   useEffect(() => {
-    kept.current = { workspace, dirty };
+    kept.current = { ...kept.current, workspace, dirty };
     onDirty(dirty);
   }, [kept, workspace, dirty, onDirty]);
 
@@ -332,7 +346,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     } else {
       backup.clear();
     }
-  }, [backup, workspace, dirty, revision]);
+  }, [backup, workspace, dirty, revision, layoutRevision]);
 
   useEffect(() => {
     if (!backup || kept.current.workspace) return;
@@ -343,23 +357,36 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const save = useCallback(() => {
     if (!workspace?.editable || !mayLeaveDrafts()) return;
     // Inside a desktop host a save dialog of the host, which answers "saved".
-    const name = saveModel(workspace, host);
+    const name = saveModel(workspace, host, kept.current.change);
     if (host) return;
     setDirty(false);
     setStatus({ text: t('Saved {0}.', name) });
-  }, [workspace, host]);
+  }, [workspace, host, kept]);
 
-  // Undo and redo from the keyboard, except while typing.
+  // The keyboard: undo and redo except while typing, Ctrl+S what the toolbar's
+  // first button does (Save NodeSet, or Apply to document in a host), Delete
+  // the node selected on the canvas.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.closest('input, textarea, select');
-      if (typing || !(e.ctrlKey || e.metaKey)) return;
-      if (e.key === 'z') { e.preventDefault(); undo(); }
-      if (e.key === 'y') { e.preventDefault(); redo(); }
+      const place = keyPlace(e.target);
+      const action = shortcut(e, place);
+      if (!action) return;
+      e.preventDefault();
+      if (action === 'undo') undo();
+      if (action === 'redo') redo();
+      if (action === 'save') {
+        // A field takes its text when it loses the focus; the saved model then holds it.
+        if (place === 'field') (e.target as HTMLElement).blur();
+        if (host) apply(); else save();
+      }
+      if (action === 'delete') {
+        const key = modelerRef.current?.selectedKey();
+        if (key && workspace?.editor?.owns(key)) run(() => workspace.editor!.delete(key));
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+  }, [undo, redo, host, apply, save, run, workspace]);
 
   // The canvas lives as long as the workspace.
   useEffect(() => {
@@ -372,7 +399,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         onOk: name => runRef.current(() => {
           const parent = workspace.space.get(key)!;
           const declaration = parent.nodeClass.endsWith('Type') || insideType(workspace.space, parent);
-          setSelected(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
+          select(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
         }),
       }),
       addReference: (source, target) => setAsk({
@@ -387,7 +414,8 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       }),
       remove: key => runRef.current(() => workspace.editor!.delete(key)),
     });
-    modeler.onSelect(key => { if (key) select(key); });
+    // A redraw selects the selected node again; that is no step to another node.
+    modeler.onSelect(key => { if (key && key !== selectedRef.current) select(key); });
     modeler.onOpen(key => {
       if (!mayLeaveDrafts()) return;
       const node = workspace.space.get(key);
@@ -398,13 +426,14 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       const diagram = modeler.current?.root;
       if (!diagram) return;
       for (const m of moved) workspace.place(diagram, m.nodeKey, m.x, m.y);
-      changed();
+      layoutChanged();
     });
     modelerRef.current = modeler;
     return () => { modeler.destroy(); modelerRef.current = undefined; };
-  }, [workspace, changed, select]);
+  }, [workspace, layoutChanged, select]);
 
-  // Redraw after every change; fit only when another type is shown.
+  // Redraw after every change, of the model or of where shapes stand (diagram-js
+  // would leave the lines of a moved shape straight); fit only when another type is shown.
   useEffect(() => {
     const modeler = modelerRef.current;
     if (!modeler || !workspace) return;
@@ -420,13 +449,16 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       if (d.truncated) setStatus({ text: t('Deeper declarations are left out; double-click a node to open its type.') });
     }
     modeler.select(selectedRef.current);
-  }, [shown, workspace, revision]);
+  }, [shown, workspace, revision, layoutRevision]);
 
   useEffect(() => { modelerRef.current?.select(selected); }, [selected]);
 
-  const checked = useMemo<Checked>(
-    () => (workspace?.editable ? runChecks(() => check(workspace.space, workspace.editable!)) : { findings: [] }),
-    [workspace, revision]);
+  // The checks run once the page is idle after a change of the model, not in
+  // the render that shows the change; they take seconds on a large model.
+  const checksFor = useMemo(() => ({ workspace, revision }), [workspace, revision]);
+  const checked = useIdle<Checked>(
+    () => (checksFor.workspace?.editable ? runChecks(() => check(checksFor.workspace!.space, checksFor.workspace!.editable!)) : { findings: [] }),
+    checksFor, { findings: [] });
   const { findings } = checked;
 
   const types = useMemo(() => {
@@ -443,24 +475,31 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     }));
   }, [workspace, filter, showExternal, revision]);
 
-  // Instances of the model: its Objects and Variables organized by the Objects folder.
+  // Instances of the model: those in the Objects folder and those below a node of another model, such as DeviceSet.
   const instances = useMemo(() => {
     if (!workspace?.editable) return [];
     const needle = filter.trim().toLowerCase();
-    return workspace.editable.nodes
-      .filter(n => (n.nodeClass === 'Object' || n.nodeClass === 'Variable') && workspace.space.in(n.id, REF.Organizes).some(e => e.source === OBJECTS))
+    return topInstances(workspace.space, workspace.editable)
       .filter(n => !needle || label(n).toLowerCase().includes(needle))
       .sort((a, b) => label(a).localeCompare(label(b)));
   }, [workspace, filter, revision]);
 
   const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
     if (!workspace?.editor) return;
+    // The supertype is asked with the name, the base type of its kind offered.
+    const options = typeOptions(workspace.space, nodeClass);
+    const keyOf = (name: string) => options.find(o => o.name === name)?.key;
     setAsk({
       title: t('Name of the new {0}', nodeClass),
-      onOk: name => run(() => {
-        const key = workspace.editor!.addType(nodeClass, name);
-        setShown(key);
-        setSelected(key);
+      extra: {
+        label: t('Supertype'),
+        value: options.find(o => o.key === TYPE_DEFAULTS[nodeClass].supertype)?.name,
+        options: options.map(o => o.name),
+        check: name => (keyOf(name) ? undefined : t("There is no {0} named '{1}'.", nodeClass, name)),
+      },
+      onOk: (name, supertype) => run(() => {
+        const key = workspace.editor!.addType(nodeClass, name, keyOf(supertype ?? ''));
+        select(key, key);
       }),
     });
   };
@@ -471,10 +510,22 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       title: t('Name of the new state machine type'),
       onOk: name => run(() => {
         const key = workspace.editor!.addStateMachineType(name);
-        setShown(key);
-        setSelected(key);
+        select(key, key);
       }),
     });
+  };
+
+  /** The diagram shown as an SVG file, named after its type; inside a host its WebView saves it. */
+  const exportDiagram = () => {
+    const modeler = modelerRef.current;
+    const type = shown ? workspace?.space.get(shown) : undefined;
+    if (!modeler || !type) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([modeler.exportSvg()], { type: 'image/svg+xml' }));
+    a.download = `${type.browseName.name.replace(/[^\w.-]+/g, '_')}.svg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus({ text: t('Exported {0}.', a.download) });
   };
 
   const goTo = (f: Finding) => {
@@ -504,12 +555,13 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
           )}
         {!host && <label className="button">{t('Open NodeSet…')}<input type="file" accept=".xml" onChange={openFile} /></label>}
         {!host && <button onClick={openSample}>{t('Open DI sample')}</button>}
-        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>{t('Apply to document')}</button>}
-        <button onClick={save} disabled={!workspace?.editable}>{t('Save NodeSet')}{dirty ? ' *' : ''}</button>
+        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable} title="Ctrl+S">{t('Apply to document')}</button>}
+        <button onClick={save} disabled={!workspace?.editable} title={host ? undefined : 'Ctrl+S'}>{t('Save NodeSet')}{dirty ? ' *' : ''}</button>
         <span className="sep" />
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">{t('Undo')}</button>
-        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">{t('Redo')}</button>
-        {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>{t('Reset layout')}</button>}
+        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y, Ctrl+Shift+Z">{t('Redo')}</button>
+        {shown && <button onClick={() => { workspace?.resetLayout(shown); layoutChanged(); }}>{t('Reset layout')}</button>}
+        {shown && <button onClick={exportDiagram} title={t('The diagram shown, as an SVG picture')}>{t('Export SVG')}</button>}
         <button disabled={!workspace?.editable} onClick={() => select(undefined)} title={t('Version, date and the models in use')}>{t('Model')}</button>
         <span className="sep" />
         <button className={errors > 0 || checked.error ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>
@@ -571,8 +623,9 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         <div className="side right">
           <Guard name={t('The node editor')} resetKey={selected}>
             {workspace && editor && selected && workspace.space.get(selected)
-              ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
-                  onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
+              // A node of its own: nothing typed into the panel of one node reaches the next.
+              ? <NodeEditor key={selected} space={workspace.space} editor={editor} nodeKey={selected} run={run}
+                  onOpenType={key => select(key, key)} onCreated={key => select(key)}
                   onInstance={key => select(key, key)} />
               : workspace?.editable
                 ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />

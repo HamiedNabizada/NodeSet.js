@@ -99,6 +99,8 @@ input, select, textarea { background: var(--field); color: var(--ink); }
 .field > div { display: flex; gap: 4px; min-width: 0; }
 .field input:not([type=checkbox]), .field select, .field textarea { flex: 1; min-width: 0; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
 .field input:disabled, .field select:disabled, .field textarea:disabled { background: var(--panel); color: var(--muted); }
+.field > div.checks { gap: 12px; padding-top: 3px; }
+.field .checks label.check { display: inline-flex; gap: 4px; align-items: center; }
 .mono { font-family: Consolas, monospace; padding-top: 4px; }
 button.link { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0 2px; font: inherit; }
 fieldset.add { border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; padding: 6px 8px 8px; display: grid; gap: 5px; font-size: 13px; }
@@ -188,7 +190,9 @@ fieldset.add .row.wrap select, fieldset.add .row.wrap input { min-width: 92px; f
 .machine { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
 .machine li { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--hover); }
 .machine li .ends { flex: 1; min-width: 0; color: var(--muted); }
-.machine li button:last-child { padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }
+.machine li > .row { flex-basis: 100%; }
+.inherited { list-style: none; margin: 2px 0 6px; padding: 0 0 0 12px; font-size: 13px; }
+.machine li > button:not(.link) { padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }
 
 /* A part that failed while it was drawn (Guard). */
 .guard { margin: 10px; padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 6px; color: var(--danger); background: var(--bg); }

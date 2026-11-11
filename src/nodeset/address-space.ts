@@ -115,7 +115,7 @@ export class AddressSpace {
     for (const n of this.nodes.values()) {
       for (const r of n.references) {
         const e = toEdge(n.id, r);
-        const k = `${e.source}\u0000${e.type}\u0000${e.target}`;
+        const k = edgeKey(e);
         if (seen.has(k)) continue;
         seen.add(k);
         push(this.outgoing, e.source, e);
@@ -126,12 +126,12 @@ export class AddressSpace {
 
   private outgoingOf(key: string): Edge[] {
     const own = this.outgoing.get(key) ?? [];
-    return this.base ? [...this.base.outgoingOf(key), ...own] : own;
+    return this.base ? merged(this.base.outgoingOf(key), own) : own;
   }
 
   private incomingOf(key: string): Edge[] {
     const own = this.incoming.get(key) ?? [];
-    return this.base ? [...this.base.incomingOf(key), ...own] : own;
+    return this.base ? merged(this.base.incomingOf(key), own) : own;
   }
 
   out(key: string, type?: string, includeSubtypes = true): Edge[] {
@@ -214,6 +214,22 @@ export class AddressSpace {
   ofClass(nodeClass: NodeClass): UaNode[] {
     return [...this.all()].filter(n => n.nodeClass === nodeClass);
   }
+}
+
+/**
+ * The edges of the base and of a space on top of it, each once: a node that
+ * both hold (a model loaded beside the copy being edited) would otherwise
+ * count its references twice.
+ */
+function merged(base: Edge[], own: Edge[]): Edge[] {
+  if (base.length === 0) return own;
+  if (own.length === 0) return base;
+  const seen = new Set(base.map(edgeKey));
+  return [...base, ...own.filter(e => !seen.has(edgeKey(e)))];
+}
+
+function edgeKey(e: Edge): string {
+  return `${e.source}\u0000${e.type}\u0000${e.target}`;
 }
 
 function toEdge(owner: string, r: Reference): Edge {

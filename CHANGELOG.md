@@ -6,6 +6,106 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **Export SVG** in the toolbar saves the diagram shown as an SVG picture
+  of its own, named after its type, without the outlines and hit areas of
+  the canvas.
+- **Inherited** in the panel of an ObjectType or VariableType: what it gets
+  from its supertypes and does not declare itself, by the type it comes
+  from, read only; a click shows the declaration.
+- The ends and the cause of a transition are changed in place (**✎** in the
+  list of transitions), each change one step of undo; before, the
+  transition had to be removed and added again.
+- **DisplayName** in the panel, apart from the name (`setDisplayName`):
+  renaming carries it along only while it is the BrowseName; empty, it is
+  the BrowseName again. Texts in further locales stay, also on renaming,
+  which kept only the first before.
+- **Add subtype** in the panel of any type, also of a loaded model's (DI's
+  DeviceType, say), adds a subtype of it to the model. The dialog of a new
+  type asks for its supertype with its name.
+- AccessLevel and UserAccessLevel (read, write), Historizing and
+  MinimumSamplingInterval of a variable in the panel (`setAccess` in the
+  editor). The defaults of the schema are not written; an instance takes
+  them from its declaration.
+- Keyboard: Delete deletes the shape selected on the canvas; Ctrl+S saves
+  the NodeSet (inside a host it applies the model to the document, as the
+  toolbar's first button does) instead of the browser saving the page;
+  Ctrl+Shift+Z redoes. Undo and redo no longer miss Ctrl+Z and Ctrl+Y with
+  Caps Lock on.
+- Rule M024: a value does not fit the DataType or ValueRank of its node (an
+  element of another built-in type, text that is not of the type, an array
+  where a single value belongs, or the other way round). The base model and
+  DI have no such value.
+- **Remove value** in the panel, also for a value the panel shows but does
+  not edit.
+- Rule M025: a variable or a field names a DataType that is unknown or no
+  DataType. M001 sees only references, and the DataType is an attribute.
+
+### Changed
+
+- Moving shapes and Reset layout no longer run the checks nor rebuild the
+  lists: they mark the model unsaved and draw the diagram anew. The checks
+  run once the page is idle after a change, not in the render that shows it,
+  so a large model answers at once and its findings follow.
+- The target of a reference in the panel is found by name in every loaded
+  model: two letters or more offer up to 50 matching nodes with their path
+  and model, the model's own first. Before, the list held every node of the
+  model (9624 on Pumps, built at each redraw) and none of another model.
+- Host protocol: "apply" and "save" carry `change`, the number of the last
+  change the NodeSet holds. A host that echoes it in "applied" or "saved"
+  (`{ type, ok, text, change }`) lets the modeler count the model as
+  unchanged only when nothing was changed since; a host that does not echo it
+  is taken at its word, as before.
+
+### Fixed
+
+- Add state and Add transition emptied the form even when the model refused
+  the state or transition (a name given twice, say); the typed name now stays
+  to be corrected.
+- The German interface showed some English: "Part of …; read only.",
+  "(none)" for the ModellingRule, the question before dropping unapplied
+  changes and the names of its sections, "The checks stopped:", "optional,
+  not set", the tooltips Bit and Value, and "Load DI/" (now "Load DI"). A
+  test reads the sources and finds text that passes t() by.
+- Deleting a state that holds a machine of its own left the machine
+  (`<State>StateMachine`) behind on the machine type; it now goes with the
+  state.
+- Apply in the fields of a DataType dropped a field's ArrayDimensions and
+  DisplayName, which the reader keeps apart from its other attributes; a new
+  supertype dropped AllowSubTypes. They now stay with the field's name, the
+  ArrayDimensions while the field stays an array of the same ValueRank.
+- The encodings of a DataType ("Default Binary", "Default XML", "Default
+  JSON") were offered as places for a new instance. They are not any more.
+- An instance placed below a node of a loaded model, such as DI's DeviceSet,
+  was missing from the list of instances, so it could not be found again. The
+  list now holds every instance that no node of the model holds.
+- Deleting a DataType left the variables, arguments and fields that named it
+  pointing nowhere, and the next new node took over its NodeId and so became
+  their DataType. Deleting a DataType in use is now refused, naming who uses
+  it, and new NodeIds count on from the highest the file names anywhere or
+  the editor gave out, so none is given out twice in a session.
+- Changing the DataType or the ValueRank kept the old value: `3.5` as Double
+  stayed `<Double>3.5</Double>` on an Int32. The value now follows in the same
+  step: kept where the new DataType takes it, written anew where its elements
+  fit the new type and rank, removed otherwise.
+- What the panel held for one node carried over to the next: unapplied
+  arguments shown and applied to another method after "Drop them?", the name
+  of a child to add, Optional picks, the transition form. Each node now gets
+  a panel of its own. Clicking the node you are on, or a redraw of the canvas,
+  no longer asks to drop unapplied changes. A transition's ends must be states
+  of its own machine (or ones it inherits), not of any machine.
+- Inside a host, an edit made while the host imported or saved the model
+  counted as saved once the host answered. With a host that echoes `change`
+  it stays unsaved, and the status line says so.
+
+- Loading the model that is open (the DI sample, then Load DI/, or its file
+  through Load a NodeSet file…) loaded it a second time: every reference
+  counted twice, and showing DeviceType took the modeler down. The model
+  being edited is no longer offered nor loaded, also not as a model another
+  file requires; an address space counts a reference once even when two of
+  its files hold the node, and a diagram draws a line once.
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

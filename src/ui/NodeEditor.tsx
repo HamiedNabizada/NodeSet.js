@@ -9,10 +9,11 @@ import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
 import { builtInOf, valueText } from '../nodeset/values';
 import { structShape, structureValues } from '../nodeset/structures';
 import { addSignals, parseSignals } from '../nodeset/csv';
-import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
+import { ArgumentsSection, FieldsSection, InheritedSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
 import { isStateMachineType } from '../nodeset/statemachine';
 import { t } from './i18n';
 
+/** The ModellingRules by their names in the specification; "(none)" is translated where it is shown. */
 const RULES: [string, string][] = [
   ['', '(none)'],
   [RULE.Mandatory, 'Mandatory (1)'],
@@ -50,9 +51,13 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
   return (
     <div className="editor">
       <h3>{label(node)} <span className="kind">{node.nodeClass}</span></h3>
-      {!own && <div className="note">Part of {id.namespaceUri}; read only.</div>}
+      {!own && <div className="note">{t('Part of {0}; read only.', id.namespaceUri)}</div>}
       <Field label={t('Name')}>
         <TextInput value={node.browseName.name} disabled={!own} onCommit={v => run(() => editor.rename(nodeKey, v))} />
+      </Field>
+      <Field label="DisplayName">
+        <TextInput value={text(node.displayName)} disabled={!own} placeholder={node.browseName.name}
+          onCommit={v => run(() => editor.setDisplayName(nodeKey, v))} />
       </Field>
       <Field label="NodeId"><span className="mono">{id.identifier}</span></Field>
       <Field label={t('Description')}>
@@ -79,7 +84,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {!isType && insideType(space, node) && (
         <Field label="ModellingRule">
           <select value={rule ?? ''} disabled={!own} onChange={e => run(() => editor.setModellingRule(nodeKey, e.target.value || undefined))}>
-            {RULES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {RULES.map(([k, v]) => <option key={k} value={k}>{k ? v : t('(none)')}</option>)}
           </select>
         </Field>
       )}
@@ -95,6 +100,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
             </select>
           </Field>
           {!node.arguments && <ValueField space={space} editor={editor} node={node} own={own} run={run} />}
+          {node.nodeClass === 'Variable' && <AccessFields editor={editor} node={node} own={own} run={run} />}
         </>
       )}
       {node.nodeClass === 'ReferenceType' && (
@@ -135,6 +141,8 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
         <InstantiateSection space={space} editor={editor} type={node} run={run} onCreated={onInstance} />
       )}
+      {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && <InheritedSection space={space} type={node} onSelect={onCreated} />}
+      {isType && <AddSubtype editor={editor} type={node} run={run} onCreated={onOpenType} />}
       {own && (
         <div className="actions">
           {isType && <button onClick={() => onOpenType(nodeKey)}>{t('Show diagram')}</button>}
@@ -162,15 +170,59 @@ function ValueField({ space, editor, node, own, run }: { space: AddressSpace; ed
   }
   const text = node.extensionObjects ? null : valueText(node, builtIn);
   const hint = !node.dataType ? t('choose a DataType first') : t('values of this DataType are not edited here');
+  const hasValue = !!node.valueXml?.trim() || !!node.extensionObjects;
   return (
-    <Field label={t('Value')}>
-      {text === null
-        ? <span className="note">{t('A structured value; kept as it was read.')}</span>
-        : <TextInput value={text ?? ''} disabled={!own || !builtIn}
-            placeholder={!builtIn ? hint : rank >= 2 ? t('a; b | c; d (rows separated by |)') : array ? 'a; b; c' : builtIn}
-            onCommit={v => run(() => editor.setValue(node.id, v))} />}
-    </Field>
+    <>
+      <Field label={t('Value')}>
+        {text === null
+          ? <span className="note">{t('A structured value; kept as it was read.')}</span>
+          : <TextInput value={text ?? ''} disabled={!own || !builtIn}
+              placeholder={!builtIn ? hint : rank >= 2 ? t('a; b | c; d (rows separated by |)') : array ? 'a; b; c' : builtIn}
+              onCommit={v => run(() => editor.setValue(node.id, v))} />}
+      </Field>
+      {/* Outside the field's label, which would pass every click on it to the button. */}
+      {own && hasValue && (
+        <div className="row"><button onClick={() => run(() => editor.setValue(node.id, undefined))}>{t('Remove value')}</button></div>
+      )}
+    </>
   );
+}
+
+/**
+ * Who may read and write the value (the first two bits of AccessLevel and
+ * UserAccessLevel; the other bits stay as they are), whether its history is
+ * kept, and how fast it is sampled. Absent attributes show the schema's
+ * defaults: read only, not historized, no interval.
+ */
+function AccessFields({ editor, node, own, run }: { editor: ModelEditor; node: UaNode; own: boolean; run: Props['run'] }) {
+  const level = node.accessLevel ?? 1;
+  const user = Number(node.otherAttributes.UserAccessLevel ?? 1);
+  const bits = (name: 'accessLevel' | 'userAccessLevel', value: number) => [[1, t('read')], [2, t('write')]].map(([bit, label]) => (
+    <label key={bit} className="check">
+      <input type="checkbox" checked={(value & (bit as number)) !== 0} disabled={!own}
+        onChange={e => run(() => editor.setAccess(node.id, { [name]: e.target.checked ? value | (bit as number) : value & ~(bit as number) }))} />
+      {label}
+    </label>
+  ));
+  return (
+    <>
+      <Group label="AccessLevel">{bits('accessLevel', level)}</Group>
+      <Group label="UserAccessLevel">{bits('userAccessLevel', user)}</Group>
+      <Group label="Historizing">
+        <input type="checkbox" checked={node.otherAttributes.Historizing === 'true'} disabled={!own}
+          onChange={e => run(() => editor.setAccess(node.id, { historizing: e.target.checked }))} />
+      </Group>
+      <Field label="MinimumSamplingInterval">
+        <TextInput value={node.otherAttributes.MinimumSamplingInterval ?? ''} disabled={!own} placeholder={t('ms; -1 not known, 0 continuously')}
+          onCommit={v => run(() => editor.setAccess(node.id, { minimumSamplingInterval: v.trim() === '' ? undefined : Number(v) }))} />
+      </Field>
+    </>
+  );
+}
+
+/** A row like Field for several controls, each with a label of its own, which a label around them all would confuse. */
+function Group({ label: title, children }: { label: string; children: React.ReactNode }) {
+  return <div className="field"><span>{title}</span><div className="checks">{children}</div></div>;
 }
 
 function canHoldChildren(c: NodeClass): boolean {
@@ -215,6 +267,28 @@ function AddChild({ editor, parent, run, onCreated, declaration }: {
   );
 }
 
+/** A subtype of the type shown, in the model being edited, whichever model the type belongs to. */
+function AddSubtype({ editor, type, run, onCreated }: { editor: ModelEditor; type: UaNode; run: Props['run']; onCreated: (key: string) => void }) {
+  const [name, setName] = useState('');
+  const add = () => {
+    if (!name.trim()) return;
+    run(() => {
+      const key = editor.addType(type.nodeClass as 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType', name, type.id);
+      setName('');
+      onCreated(key);
+    });
+  };
+  return (
+    <fieldset className="add">
+      <legend>{t('Add subtype')}</legend>
+      <div className="row">
+        <input placeholder={t('Name')} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
+        <button onClick={add} disabled={!name.trim()}>{t('Add')}</button>
+      </div>
+    </fieldset>
+  );
+}
+
 function Field({ label: title, children }: { label: string; children: React.ReactNode }) {
   return <label className="field"><span>{title}</span><div>{children}</div></label>;
 }
@@ -236,14 +310,7 @@ function TextInput({ value, disabled, multiline, placeholder, onCommit }: {
 export function TypePicker({ space, nodeClass, value, disabled, onPick, placeholder }: {
   space: AddressSpace; nodeClass: NodeClass; value?: string; disabled?: boolean; onPick: (key: string) => void; placeholder?: string;
 }) {
-  const options = useMemo(() => {
-    const nodes = space.ofClass(nodeClass);
-    const count = new Map<string, number>();
-    for (const n of nodes) count.set(label(n), (count.get(label(n)) ?? 0) + 1);
-    return nodes
-      .map(n => ({ key: n.id, name: count.get(label(n))! > 1 ? `${label(n)} (${shortNs(n.browseName.namespaceUri)})` : label(n) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [space, nodeClass]);
+  const options = useMemo(() => typeOptions(space, nodeClass), [space, nodeClass]);
   const current = options.find(o => o.key === value)?.name ?? '';
   const [draft, setDraft] = useState(current);
   useEffect(() => setDraft(current), [current]);
@@ -260,6 +327,19 @@ export function TypePicker({ space, nodeClass, value, disabled, onPick, placehol
       <datalist id={listId}>{options.map(o => <option key={o.key} value={o.name} />)}</datalist>
     </>
   );
+}
+
+/** Sorts as localeCompare does, without making a collator for every comparison of a list of hundreds. */
+const collator = new Intl.Collator();
+
+/** The nodes of one NodeClass by name, sorted; a name that occurs in several models carries its namespace. */
+export function typeOptions(space: AddressSpace, nodeClass: NodeClass): { key: string; name: string }[] {
+  const nodes = space.ofClass(nodeClass);
+  const count = new Map<string, number>();
+  for (const n of nodes) count.set(label(n), (count.get(label(n)) ?? 0) + 1);
+  return nodes
+    .map(n => ({ key: n.id, name: count.get(label(n))! > 1 ? `${label(n)} (${shortNs(n.browseName.namespaceUri)})` : label(n) }))
+    .sort((a, b) => collator.compare(a.name, b.name));
 }
 
 function shortNs(uri: string): string {
