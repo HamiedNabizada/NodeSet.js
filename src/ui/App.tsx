@@ -1,16 +1,17 @@
 import { MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeSetModeler } from '../modeler/Modeler';
-import { REF, RULE } from '../nodeset/address-space';
+import { RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { check, Finding, RULES } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
-import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
+import { NodeClass, text, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler, savesAll } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
 import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
+import { topInstances } from './instances';
 import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
@@ -27,8 +28,6 @@ type Status = { text: string; warn?: boolean };
 
 /** Told to the host in "ready". */
 const VERSION = '0.2.0';
-
-const OBJECTS = uaKey(85);
 
 /** What is open, kept outside the modeler so that a failure of the modeler does not take it along. */
 interface Kept {
@@ -448,12 +447,11 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     }));
   }, [workspace, filter, showExternal, revision]);
 
-  // Instances of the model: its Objects and Variables organized by the Objects folder.
+  // Instances of the model: those in the Objects folder and those below a node of another model, such as DeviceSet.
   const instances = useMemo(() => {
     if (!workspace?.editable) return [];
     const needle = filter.trim().toLowerCase();
-    return workspace.editable.nodes
-      .filter(n => (n.nodeClass === 'Object' || n.nodeClass === 'Variable') && workspace.space.in(n.id, REF.Organizes).some(e => e.source === OBJECTS))
+    return topInstances(workspace.space, workspace.editable)
       .filter(n => !needle || label(n).toLowerCase().includes(needle))
       .sort((a, b) => label(a).localeCompare(label(b)));
   }, [workspace, filter, revision]);

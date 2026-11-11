@@ -55,6 +55,23 @@ test('does not carry an unapplied argument over to the next method, and asks onl
   expect(errors).toEqual([]);
 });
 
+test('lists an instance placed below a node of a loaded model, such as DeviceSet', async ({ page }) => {
+  const errors = watchErrors(page);
+  await newModel(page);
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await page.getByRole('button', { name: /^Load DI/ }).click();
+  await expect(page.locator('.status')).toContainText('Loaded');
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'PumpType');
+  const create = page.locator('fieldset', { has: page.locator('legend', { hasText: 'Create instance' }) });
+  await create.locator('select').selectOption({ label: 'DeviceSet (DI)' });
+  await create.getByPlaceholder('Name of the instance').fill('Pump1');
+  await create.getByRole('button', { name: 'Create' }).click();
+
+  await expect(page.locator('.main > .side:not(.right) .item', { hasText: 'Pump1' })).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
 test('starts the panel of another node empty: the name of a child to add does not stay', async ({ page }) => {
   page.on('dialog', dialog => dialog.accept());
   await newModel(page);

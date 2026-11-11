@@ -27,6 +27,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- An instance placed below a node of a loaded model, such as DI's DeviceSet,
+  was missing from the list of instances, so it could not be found again. The
+  list now holds every instance that no node of the model holds.
 - Deleting a DataType left the variables, arguments and fields that named it
   pointing nowhere, and the next new node took over its NodeId and so became
   their DataType. Deleting a DataType in use is now refused, naming who uses

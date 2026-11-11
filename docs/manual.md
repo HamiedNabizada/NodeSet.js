@@ -98,7 +98,9 @@ adds a state machine type. Abstract types are set in italics.
 At first the list shows the types of the model you edit. With **Types of
 required models** checked, it also shows those of the loaded models, in
 grey. The group Instances lists the model's Objects and Variables that the
-Objects folder organizes, each with its type after `::`.
+Objects folder organizes or that hang below a node of a loaded model, such
+as DI's DeviceSet, each with its type after `::`. What an instance holds is
+not listed; it shows in that instance's diagram.
 
 Click an entry, or select it with the keyboard and press Enter or Space: the
 canvas shows its diagram and the panel on the right its properties.
@@ -739,9 +741,8 @@ What the modeler does not edit, or edits only in part:
 - **The diagram** shows a type's own declarations, three levels deep and
   at most 200 shapes, and not the ones it inherits. It cannot be exported
   as a picture.
-- **The list of instances** shows what the Objects folder organizes. An
-  instance placed below another instance shows in that instance's diagram;
-  one placed below a node of a loaded model, such as DeviceSet, is not
-  listed.
+- **The list of instances** shows the instances the Objects folder
+  organizes or a node of a loaded model holds. An instance placed below
+  another instance shows in that instance's diagram, not in the list.
 - **Instances** do not follow later changes of their type.
 - **Undo** keeps the last 100 steps; moving shapes is not one of them.
