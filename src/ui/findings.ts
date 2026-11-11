@@ -4,6 +4,7 @@
 // taking the whole modeler with it.
 
 import { Finding } from '../nodeset/checks';
+import { t } from './i18n';
 
 export interface Checked {
   findings: Finding[];
@@ -15,6 +16,6 @@ export function runChecks(checks: () => Finding[]): Checked {
   try {
     return { findings: checks() };
   } catch (e) {
-    return { findings: [], error: `The checks stopped: ${e instanceof Error ? e.message : String(e)}` };
+    return { findings: [], error: t('The checks stopped: {0}', e instanceof Error ? e.message : String(e)) };
   }
 }

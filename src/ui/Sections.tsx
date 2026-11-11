@@ -35,7 +35,8 @@ function ArgumentList({ space, editor, method, which, run }: { space: AddressSpa
   const currentKey = JSON.stringify(current);
   useEffect(() => setDraft(current), [currentKey]);
   const changed = JSON.stringify(draft) !== currentKey;
-  useDraft(`${which} arguments`, changed);
+  // The name the question before leaving shows.
+  useDraft(which === 'Input' ? t('Input arguments') : t('Output arguments'), changed);
   const update = (i: number, patch: Partial<Argument>) => setDraft(d => d.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
   return (
@@ -86,7 +87,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
   useEffect(() => setDraft(current), [currentKey]);
   const changed = !!kind && fieldsKey(draft) !== currentKey;
   // Before the return below: a DataType without fields calls no fewer hooks than one with.
-  useDraft('Fields', changed);
+  useDraft(t('Fields'), changed);
   if (!kind) return null;
   const [legend, noun] = fieldLegends()[kind];
   const update = (i: number, patch: Partial<FieldDraft>) => setDraft(d => d.map((f, j) => (j === i ? { ...f, ...patch } : f)));
@@ -97,7 +98,7 @@ export function FieldsSection({ space, editor, dataType, run }: { space: Address
       {draft.map((f, i) => (
         <div className={`row${isEnum ? '' : ' item-row'}`} key={i}>
           {isEnum && (
-            <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? 'Bit' : 'Value'}
+            <input className="value" type="number" step={1} min={kind === 'optionSet' ? 0 : undefined} value={f.value ?? i} title={kind === 'optionSet' ? t('Bit') : t('Value')}
               onChange={e => update(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })} />
           )}
           <input placeholder={t('Name')} value={f.name} onChange={e => update(i, { name: e.target.value })} />
@@ -147,7 +148,7 @@ export function StructureValueSection({ space, editor, node, shape, current, own
   const [draft, setDraft] = useState<StructValue[]>(JSON.parse(currentJson));
   useEffect(() => setDraft(JSON.parse(currentJson)), [currentJson]);
   const changed = JSON.stringify(draft) !== currentJson;
-  useDraft('Value', changed);
+  useDraft(t('Value'), changed);
   const set = (i: number, v: StructValue) => setDraft(d => d.map((x, j) => (j === i ? v : x)));
 
   return (
@@ -217,7 +218,7 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
             <div className="row struct-row" key={f.name}>
               <span title={typeTitle(space, f)}>{f.name}</span>
               <label className="struct-optional">
-                <input type="checkbox" checked={false} disabled={disabled} onChange={() => setField(f.name, emptyField(space, f, depth))} /> optional, not set
+                <input type="checkbox" checked={false} disabled={disabled} onChange={() => setField(f.name, emptyField(space, f, depth))} /> {t('optional, not set')}
               </label>
             </div>
           );
@@ -235,7 +236,7 @@ function StructFields({ space, shapeKey, value, onChange, disabled, depth }: {
 
 function typeTitle(space: AddressSpace, f: FieldShape): string {
   const type = f.kind === 'builtIn' ? f.builtIn! : space.get(f.dataType)?.browseName.name ?? '';
-  return `${type}${f.array ? '[]' : ''}${f.optional ? ', optional' : ''}`;
+  return `${type}${f.array ? '[]' : ''}${f.optional ? `, ${t('optional')}` : ''}`;
 }
 
 /** One field: a text for built-in values, a list for enumerations, nested fields for structures; arrays of each. */

@@ -13,9 +13,15 @@ test('speaks German in a German browser, the messages of the core included', asy
   await page.getByRole('button', { name: 'Anlegen' }).click();
   await expect(page.locator('.status')).toContainText('Knoten von http://example.org/Anlage/');
 
+  await page.getByRole('button', { name: 'Modell', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'DI laden' })).toBeVisible();
   await page.locator('button[title="Neuer ObjectType"]').click();
   await answer(page, 'PumpType');
   await expect(page.locator('.status')).toContainText('Geändert.');
+  // A node of another model says so in German.
+  await page.locator('.item', { hasText: 'PumpType' }).click();
+  await page.locator('.djs-shape', { hasText: 'BaseObjectType' }).click();
+  await expect(page.locator('.editor .note').first()).toHaveText('Teil von http://opcfoundation.org/UA/; nur lesbar.');
 
   // A message of the core: a model URI that is none.
   await page.getByRole('button', { name: 'Neues Modell…' }).click();

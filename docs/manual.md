@@ -191,7 +191,7 @@ panel when no node is selected.
   NodeSet declares for the model.
 - **Models in use**: every loaded model with its version, marked
   "required" when the model declares it as a RequiredModel and "loaded"
-  otherwise. **Load DI/** loads the DI model that ships with the modeler
+  otherwise. **Load DI** loads the DI model that ships with the modeler
   (the button is there while DI is neither loaded nor the model you edit).
   **Load a NodeSet file…** loads any other NodeSet, with the models it
   requires as far as the modeler has them. A file of models that are loaded

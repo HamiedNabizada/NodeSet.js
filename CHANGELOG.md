@@ -40,6 +40,11 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- The German interface showed some English: "Part of …; read only.",
+  "(none)" for the ModellingRule, the question before dropping unapplied
+  changes and the names of its sections, "The checks stopped:", "optional,
+  not set", the tooltips Bit and Value, and "Load DI/" (now "Load DI"). A
+  test reads the sources and finds text that passes t() by.
 - Deleting a state that holds a machine of its own left the machine
   (`<State>StateMachine`) behind on the machine type; it now goes with the
   state.

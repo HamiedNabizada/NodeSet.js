@@ -64,7 +64,7 @@ export function ModelPanel({ workspace, run, onLoaded }: {
           </div>
         ))}
         <div className="note">{t('Models whose types the model uses are declared as required when it is saved.')}</div>
-        {offer.map(uri => <button key={uri} onClick={() => addBundled(uri)}>Load {uri.replace('http://opcfoundation.org/UA/', '')}</button>)}
+        {offer.map(uri => <button key={uri} onClick={() => addBundled(uri)}>{t('Load {0}', shortName(uri))}</button>)}
         <label className="button-like">{t('Load a NodeSet file…')}<input type="file" accept=".xml" onChange={addFile} /></label>
       </fieldset>
     </div>

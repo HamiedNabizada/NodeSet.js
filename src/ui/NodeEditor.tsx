@@ -13,6 +13,7 @@ import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection,
 import { isStateMachineType } from '../nodeset/statemachine';
 import { t } from './i18n';
 
+/** The ModellingRules by their names in the specification; "(none)" is translated where it is shown. */
 const RULES: [string, string][] = [
   ['', '(none)'],
   [RULE.Mandatory, 'Mandatory (1)'],
@@ -50,7 +51,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
   return (
     <div className="editor">
       <h3>{label(node)} <span className="kind">{node.nodeClass}</span></h3>
-      {!own && <div className="note">Part of {id.namespaceUri}; read only.</div>}
+      {!own && <div className="note">{t('Part of {0}; read only.', id.namespaceUri)}</div>}
       <Field label={t('Name')}>
         <TextInput value={node.browseName.name} disabled={!own} onCommit={v => run(() => editor.rename(nodeKey, v))} />
       </Field>
@@ -79,7 +80,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {!isType && insideType(space, node) && (
         <Field label="ModellingRule">
           <select value={rule ?? ''} disabled={!own} onChange={e => run(() => editor.setModellingRule(nodeKey, e.target.value || undefined))}>
-            {RULES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {RULES.map(([k, v]) => <option key={k} value={k}>{k ? v : t('(none)')}</option>)}
           </select>
         </Field>
       )}
