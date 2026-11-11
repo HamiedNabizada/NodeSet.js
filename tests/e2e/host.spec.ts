@@ -84,6 +84,15 @@ test('keeps an edit made while the host imports unsaved, when the host names the
   await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
 });
 
+test('applies the model to the document with Ctrl+S, as the first button of the toolbar does', async ({ page }) => {
+  await openedByHost(page);
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'FirstType');
+  await page.keyboard.press('Control+S');
+  await expect.poll(async () => (await lastPosted(page, 'apply'))?.xml).toContain(':FirstType"');
+  expect(await lastPosted(page, 'save')).toBeUndefined();
+});
+
 test('counts the model as saved on a reply without a change, as hosts did before', async ({ page }) => {
   await openedByHost(page);
   await page.locator('button[title="New ObjectType"]').click();

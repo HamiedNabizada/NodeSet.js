@@ -145,6 +145,8 @@ model a small context pad appears beside the shape. Its entries:
 | **→** | Draw a reference to another node (see [References](#references)) |
 | **×** | Delete the node and what it holds |
 
+The Delete key does what **×** does, for the shape selected on the canvas.
+
 Double-click a shape to open its type: a type shows its own diagram, an
 Object or Variable the diagram of its TypeDefinition.
 
@@ -620,9 +622,14 @@ why.
 
 ## Undo and redo
 
-**Undo** and **Redo** in the toolbar, or Ctrl+Z and Ctrl+Y (Cmd on a Mac),
-take changes back and bring them again. While the cursor is in a text field
-or a list, the keys belong to that field.
+**Undo** and **Redo** in the toolbar, or Ctrl+Z and Ctrl+Y or Ctrl+Shift+Z
+(Cmd on a Mac; Caps Lock does not matter), take changes back and bring them
+again. While the cursor is in a text field or a list, the keys belong to that
+field.
+
+Ctrl+S saves the NodeSet, as **Save NodeSet** does; inside the AutomationML
+Editor it applies the model to the document, as **Apply to document** does.
+From a text field it takes what you typed first.
 
 Every change is one step: a field, a child, a deletion. So is every
 **Apply** of a section and every file of variables from CSV, however much

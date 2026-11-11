@@ -8,6 +8,11 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- Keyboard: Delete deletes the shape selected on the canvas; Ctrl+S saves
+  the NodeSet (inside a host it applies the model to the document, as the
+  toolbar's first button does) instead of the browser saving the page;
+  Ctrl+Shift+Z redoes. Undo and redo no longer miss Ctrl+Z and Ctrl+Y with
+  Caps Lock on.
 - Rule M024: a value does not fit the DataType or ValueRank of its node (an
   element of another built-in type, text that is not of the type, an array
   where a single value belongs, or the other way round). The base model and

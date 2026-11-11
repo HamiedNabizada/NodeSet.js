@@ -92,6 +92,12 @@ export class NodeSetModeler {
     selection.select(element ?? null);
   }
 
+  /** The node of the shape selected on the canvas, if any. */
+  selectedKey(): string | undefined {
+    const selection = this.get<{ get(): { businessObject?: { nodeKey?: string } }[] }>('selection');
+    return selection.get()[0]?.businessObject?.nodeKey;
+  }
+
   /** Called with the node key of a shape when the user selects or opens it. */
   onSelect(callback: (nodeKey: string | undefined) => void): void {
     this.get<EventBus>('eventBus').on('selection.changed', (e: { newSelection?: { businessObject?: { nodeKey?: string } }[] }) => {

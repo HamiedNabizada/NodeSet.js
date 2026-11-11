@@ -12,6 +12,7 @@ import { mayLeaveDrafts } from './drafts';
 import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
 import { useIdle } from './idle';
+import { keyPlace, shortcut } from './keys';
 import { topInstances } from './instances';
 import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
@@ -362,17 +363,30 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     setStatus({ text: t('Saved {0}.', name) });
   }, [workspace, host, kept]);
 
-  // Undo and redo from the keyboard, except while typing.
+  // The keyboard: undo and redo except while typing, Ctrl+S what the toolbar's
+  // first button does (Save NodeSet, or Apply to document in a host), Delete
+  // the node selected on the canvas.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = (e.target as HTMLElement)?.closest('input, textarea, select');
-      if (typing || !(e.ctrlKey || e.metaKey)) return;
-      if (e.key === 'z') { e.preventDefault(); undo(); }
-      if (e.key === 'y') { e.preventDefault(); redo(); }
+      const place = keyPlace(e.target);
+      const action = shortcut(e, place);
+      if (!action) return;
+      e.preventDefault();
+      if (action === 'undo') undo();
+      if (action === 'redo') redo();
+      if (action === 'save') {
+        // A field takes its text when it loses the focus; the saved model then holds it.
+        if (place === 'field') (e.target as HTMLElement).blur();
+        if (host) apply(); else save();
+      }
+      if (action === 'delete') {
+        const key = modelerRef.current?.selectedKey();
+        if (key && workspace?.editor?.owns(key)) run(() => workspace.editor!.delete(key));
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+  }, [undo, redo, host, apply, save, run, workspace]);
 
   // The canvas lives as long as the workspace.
   useEffect(() => {
@@ -519,11 +533,11 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
           )}
         {!host && <label className="button">{t('Open NodeSet…')}<input type="file" accept=".xml" onChange={openFile} /></label>}
         {!host && <button onClick={openSample}>{t('Open DI sample')}</button>}
-        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable}>{t('Apply to document')}</button>}
-        <button onClick={save} disabled={!workspace?.editable}>{t('Save NodeSet')}{dirty ? ' *' : ''}</button>
+        {host && <button className="primary" onClick={apply} disabled={!workspace?.editable} title="Ctrl+S">{t('Apply to document')}</button>}
+        <button onClick={save} disabled={!workspace?.editable} title={host ? undefined : 'Ctrl+S'}>{t('Save NodeSet')}{dirty ? ' *' : ''}</button>
         <span className="sep" />
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">{t('Undo')}</button>
-        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">{t('Redo')}</button>
+        <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y, Ctrl+Shift+Z">{t('Redo')}</button>
         {shown && <button onClick={() => { workspace?.resetLayout(shown); layoutChanged(); }}>{t('Reset layout')}</button>}
         <button disabled={!workspace?.editable} onClick={() => select(undefined)} title={t('Version, date and the models in use')}>{t('Model')}</button>
         <span className="sep" />
