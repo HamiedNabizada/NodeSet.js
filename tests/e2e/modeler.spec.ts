@@ -108,6 +108,26 @@ test('keeps where a shape was moved to, as an unsaved change, and lays the diagr
   expect(errors).toEqual([]);
 });
 
+test('exports the diagram shown as an SVG picture of its own', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open DI sample' }).click();
+  await expect(page.locator('.status')).toContainText('nodes of http://opcfoundation.org/UA/DI/');
+  await typeList(page).filter({ hasText: /^DeviceType$/ }).click();
+  await page.locator('.djs-shape', { hasText: 'SerialNumber' }).first().click();
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export SVG' }).click()]);
+  expect(download.suggestedFilename()).toBe('DeviceType.svg');
+  const svg = await readFile(await download.path(), 'utf8');
+  expect(svg).toMatch(/^<\?xml[^>]*\?>\s*<svg xmlns="http:\/\/www.w3.org\/2000\/svg"[^>]* viewBox="/);
+  for (const name of ['DeviceType', 'ComponentType', 'SerialNumber']) expect(svg).toContain(`>${name}<`);
+  // What the canvas adds for editing stays behind: the outline of the selection, the hit areas.
+  expect(svg).not.toMatch(/djs-outline|djs-hit|selected/);
+  // It is a picture a browser shows on its own.
+  await page.setContent(svg.replace(/^<\?xml[^>]*\?>/, ''));
+  const box = await page.locator('svg').boundingBox();
+  expect(box!.width).toBeGreaterThan(200);
+});
+
 test('counts an edit that made the modeler fail as unsaved', async ({ page }) => {
   await openNodeSet(page, fixture);
   await breakSorting(page);

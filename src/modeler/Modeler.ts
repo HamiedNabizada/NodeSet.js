@@ -92,6 +92,28 @@ export class NodeSetModeler {
     selection.select(element ?? null);
   }
 
+  /**
+   * The diagram as a picture of its own (SVG): the shapes and lines as drawn,
+   * on white, without what the canvas adds for editing (outlines, hit areas,
+   * the selection). The renderer draws with attributes, not style sheets, so
+   * nothing else is needed.
+   */
+  exportSvg(): string {
+    const layer = this.get<{ getActiveLayer(): SVGGElement }>('canvas').getActiveLayer();
+    const box = layer.getBBox();
+    const copy = layer.cloneNode(true) as SVGGElement;
+    for (const helper of Array.from(copy.querySelectorAll('.djs-outline, .djs-hit, .djs-bendpoint, .djs-segment-dragger'))) helper.remove();
+    for (const element of Array.from(copy.querySelectorAll('[class]'))) element.removeAttribute('class');
+    copy.removeAttribute('class');
+    const margin = 20;
+    const [x, y] = [Math.floor(box.x - margin), Math.floor(box.y - margin)];
+    const [width, height] = [Math.ceil(box.width + 2 * margin), Math.ceil(box.height + 2 * margin)];
+    const content = new XMLSerializer().serializeToString(copy);
+    return '<?xml version="1.0" encoding="utf-8"?>\n'
+      + `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">`
+      + `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff"/>${content}</svg>\n`;
+  }
+
   /** The node of the shape selected on the canvas, if any. */
   selectedKey(): string | undefined {
     const selection = this.get<{ get(): { businessObject?: { nodeKey?: string } }[] }>('selection');

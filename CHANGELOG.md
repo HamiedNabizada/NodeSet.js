@@ -8,6 +8,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- **Export SVG** in the toolbar saves the diagram shown as an SVG picture
+  of its own, named after its type, without the outlines and hit areas of
+  the canvas.
 - **Inherited** in the panel of an ObjectType or VariableType: what it gets
   from its supertypes and does not declare itself, by the type it comes
   from, read only; a click shows the declaration.

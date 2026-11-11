@@ -515,6 +515,19 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     });
   };
 
+  /** The diagram shown as an SVG file, named after its type; inside a host its WebView saves it. */
+  const exportDiagram = () => {
+    const modeler = modelerRef.current;
+    const type = shown ? workspace?.space.get(shown) : undefined;
+    if (!modeler || !type) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([modeler.exportSvg()], { type: 'image/svg+xml' }));
+    a.download = `${type.browseName.name.replace(/[^\w.-]+/g, '_')}.svg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus({ text: t('Exported {0}.', a.download) });
+  };
+
   const goTo = (f: Finding) => {
     if (!workspace) return;
     let owner = workspace.space.get(f.node);
@@ -548,6 +561,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">{t('Undo')}</button>
         <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y, Ctrl+Shift+Z">{t('Redo')}</button>
         {shown && <button onClick={() => { workspace?.resetLayout(shown); layoutChanged(); }}>{t('Reset layout')}</button>}
+        {shown && <button onClick={exportDiagram} title={t('The diagram shown, as an SVG picture')}>{t('Export SVG')}</button>}
         <button disabled={!workspace?.editable} onClick={() => select(undefined)} title={t('Version, date and the models in use')}>{t('Model')}</button>
         <span className="sep" />
         <button className={errors > 0 || checked.error ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>

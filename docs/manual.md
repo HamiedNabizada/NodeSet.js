@@ -82,7 +82,9 @@ Discard them?"
 
 From left to right: **New model…**, **Open NodeSet…**, **Open DI sample**,
 **Save NodeSet** (with a star, **Save NodeSet \***, while there are unsaved
-changes), **Undo**, **Redo**, **Reset layout** (while a diagram is shown),
+changes), **Undo**, **Redo**, **Reset layout** and **Export SVG** (while a
+diagram is shown; the latter saves the diagram as a picture, named after
+its type),
 **Model**, the **Checks** button, which counts the findings ("Checks: 1
 error(s), 0 warning(s)"), and the checkbox **Types of required models**.
 In a narrow window the toolbar takes two rows.
@@ -775,7 +777,8 @@ What the modeler does not edit, or edits only in part:
 - **Views** are neither created nor edited.
 - **The diagram** shows a type's own declarations, three levels deep and
   at most 200 shapes, and not the ones it inherits (the panel lists those
-  under **Inherited**). It cannot be exported as a picture.
+  under **Inherited**). **Export SVG** writes it as SVG only; for PNG or PDF
+  open the SVG in a browser or a drawing program.
 - **The list of instances** shows the instances the Objects folder
   organizes or a node of a loaded model holds. An instance placed below
   another instance shows in that instance's diagram, not in the list.
