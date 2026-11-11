@@ -45,6 +45,7 @@ export const RULES: Record<string, string> = {
   M022: 'An instance is missing a child its type declares as Mandatory.',
   M023: 'An instance fills none of a MandatoryPlaceholder its type declares.',
   M024: 'A value does not fit the DataType or ValueRank of its node.',
+  M025: 'A variable or a field names a DataType that is unknown or no DataType.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -142,6 +143,15 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
     if (n.nodeClass === 'Variable' || n.nodeClass === 'VariableType') {
       const misfit = valueMisfit(space, n);
       if (misfit) add('M024', 'error', n, misfit);
+      // The DataType is an attribute, so M001 does not see it.
+      const dataType = n.dataType ? space.get(n.dataType) : undefined;
+      if (n.dataType && !dataType) add('M025', 'error', n, msg`its DataType ${n.dataType} is unknown.`);
+      else if (dataType && dataType.nodeClass !== 'DataType') add('M025', 'error', n, msg`its DataType ${label(dataType)} is a ${dataType.nodeClass}.`);
+    }
+    for (const f of n.definition?.fields ?? []) {
+      const dataType = f.dataType ? space.get(f.dataType) : undefined;
+      if (f.dataType && !dataType) add('M025', 'error', n, msg`the field '${f.name}' names the unknown DataType ${f.dataType}.`);
+      else if (dataType && dataType.nodeClass !== 'DataType') add('M025', 'error', n, msg`the field '${f.name}' names ${label(dataType)}, a ${dataType.nodeClass}, as its DataType.`);
     }
 
     for (const a of n.arguments ?? []) {

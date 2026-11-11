@@ -14,6 +14,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
   DI have no such value.
 - **Remove value** in the panel, also for a value the panel shows but does
   not edit.
+- Rule M025: a variable or a field names a DataType that is unknown or no
+  DataType. M001 sees only references, and the DataType is an attribute.
 
 ### Changed
 
@@ -25,6 +27,11 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- Deleting a DataType left the variables, arguments and fields that named it
+  pointing nowhere, and the next new node took over its NodeId and so became
+  their DataType. Deleting a DataType in use is now refused, naming who uses
+  it, and new NodeIds count on from the highest the file names anywhere or
+  the editor gave out, so none is given out twice in a session.
 - Changing the DataType or the ValueRank kept the old value: `3.5` as Double
   stayed `<Double>3.5</Double>` on an Int32. The value now follows in the same
   step: kept where the new DataType takes it, written anew where its elements

@@ -87,6 +87,42 @@ describe('Editing a model', () => {
     expect(() => editor.delete(pump)).toThrow(/has subtypes/);
   });
 
+  // A DataType is named by an attribute, not by a reference: deleting it left the
+  // attribute pointing nowhere, and the next new node took over its NodeId.
+  it('refuses to delete a DataType in use, and gives no NodeId out twice', async () => {
+    const { ws, editor, start, speed } = await pumpModel();
+    const status = editor.addType('DataType', 'StatusType');
+    editor.setFields(status, [{ name: 'Code', dataType: uaKey(7) }]);
+    editor.setDataType(speed, status);
+
+    expect(() => editor.delete(status)).toThrow("'StatusType' is the DataType of 'Speed'; give it another DataType first.");
+    editor.setArguments(start, 'Input', [{ name: 'Status', dataType: status, valueRank: -1, arrayDimensions: [] }]);
+    const wrapper = editor.addType('DataType', 'WrapperType');
+    editor.setFields(wrapper, [{ name: 'Status', dataType: status }]);
+    expect(() => editor.delete(status)).toThrow("'StatusType' is the DataType of 'Speed' and 2 more; give them another DataType first.");
+    expect(ws.space.get(status)).toBeDefined();
+
+    editor.setDataType(speed, uaKey(11));
+    editor.setArguments(start, 'Input', []);
+    editor.delete(wrapper);
+    const gone = editor.delete(status);
+    const valve = editor.addType('ObjectType', 'ValveType');
+    const motor = editor.addDeclaration(valve, 'Variable', 'Motor');
+    expect(gone).not.toContain(valve);
+    expect(gone).not.toContain(motor);
+  });
+
+  it('gives no NodeId out that a reference of the file still names', async () => {
+    const draft = new Workspace();
+    await draft.create(PUMPS);
+    const pump = draft.editor!.addType('ObjectType', 'PumpType');
+    draft.editable!.nodes.find(n => n.id === pump)!.references.push({ type: REF.Organizes, isForward: true, target: `${PUMPS}|i=1500` });
+    const ws = new Workspace();
+    await ws.open(draft.save());
+
+    expect(ws.editor!.addType('ObjectType', 'ValveType')).toBe(`${PUMPS}|i=1501`);
+  });
+
   it('writes a model that reads back the same', async () => {
     const { ws } = await pumpModel();
     const again = readNodeSet(ws.save());

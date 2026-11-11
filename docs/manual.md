@@ -355,7 +355,10 @@ line.
 **Name** renames the node; its DisplayName follows. **Delete** in the panel,
 or **×** in the context pad, deletes the node, everything it holds and every
 reference to them. A type that has subtypes is not deleted: "'…' has
-subtypes; delete or move them first."
+subtypes; delete or move them first." Nor is a DataType that a variable, an
+argument or a field still names: "'StatusType' is the DataType of 'Speed';
+give it another DataType first." A new node never gets the NodeId of a node
+deleted in the same session.
 
 ## Values
 
@@ -607,6 +610,7 @@ why.
 | M022 | error | An instance is missing a child its type declares as Mandatory. |
 | M023 | error | An instance fills none of a MandatoryPlaceholder its type declares. |
 | M024 | error | A value does not fit the DataType or ValueRank of its node. |
+| M025 | error | A variable or a field names a DataType that is unknown or no DataType. |
 
 ## Undo and redo
 

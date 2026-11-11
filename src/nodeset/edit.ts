@@ -183,6 +183,8 @@ export class ModelEditor {
   private recordedState?: Recorded;
   /** Inside a batch the changes become one step when the outermost batch ends. */
   private batching = 0;
+  /** The highest number of a NodeId the file named or the editor gave out; see nextId. */
+  private highest?: number;
 
   /**
    * @param file the editable file, changed in place
@@ -363,13 +365,32 @@ export class ModelEditor {
     return n;
   }
 
+  /**
+   * The next free numeric NodeId of the model's namespace. Numbers count on
+   * from the highest the file names anywhere (a node, a reference, a
+   * DataType) and the highest given out while editing, so a node deleted,
+   * or one an undo took back, never passes its NodeId to another.
+   */
   private nextId(): string {
-    let max = 0;
-    for (const n of this.file.nodes) {
-      const { namespaceUri, identifier } = parseNodeIdKey(n.id);
-      if (namespaceUri === this.namespace && identifier.startsWith('i=')) max = Math.max(max, Number(identifier.slice(2)));
+    if (this.highest === undefined) {
+      let max = 999;
+      const note = (key: string | undefined) => {
+        if (!key) return;
+        const { namespaceUri, identifier } = parseNodeIdKey(key);
+        if (namespaceUri === this.namespace && identifier.startsWith('i=')) max = Math.max(max, Number(identifier.slice(2)) || 0);
+      };
+      for (const n of this.file.nodes) {
+        note(n.id); note(n.parent); note(n.dataType); note(n.methodDeclaration);
+        for (const r of n.references) { note(r.type); note(r.target); }
+        for (const a of n.arguments ?? []) note(a.dataType);
+        for (const f of n.definition?.fields ?? []) note(f.dataType);
+      }
+      this.highest = max;
     }
-    return `${this.namespace}|i=${Math.max(max + 1, 1000)}`;
+    let key: string;
+    do key = `${this.namespace}|i=${++this.highest}`;
+    while (this.file.nodes.some(n => n.id === key));
+    return key;
   }
 
   private create(nodeClass: NodeClass, name: string): UaNode {
@@ -1248,9 +1269,36 @@ export class ModelEditor {
       if (this.file.nodes.some(n => !doomed.has(n.id) && n.references.some(r => r.type === REF.HasSubtype && !r.isForward && doomed.has(r.target)))) {
         throw new EditError(msg`'${root.browseName.name}' has subtypes; delete or move them first.`);
       }
+      this.refuseDataTypeInUse(doomed);
       this.removeNodes(doomed);
       return [...doomed];
     });
+  }
+
+  /**
+   * A DataType is named by attributes (of a variable, an argument, a field),
+   * not by references, so deleting it would leave them pointing nowhere.
+   * Refuses that, naming who still uses it.
+   */
+  private refuseDataTypeInUse(doomed: Set<string>): void {
+    const users: string[] = [];
+    let used: UaNode | undefined;
+    const names = (dataType: string | undefined) => {
+      if (!dataType || !doomed.has(dataType)) return false;
+      used ??= this.file.nodes.find(x => x.id === dataType);
+      return true;
+    };
+    for (const n of this.file.nodes) {
+      if (doomed.has(n.id)) continue;
+      if (names(n.dataType)) users.push(n.browseName.name);
+      // An argument belongs to its method, which the user knows by name.
+      if ((n.arguments ?? []).some(a => names(a.dataType))) users.push(this.space().parentOf(n)?.browseName.name ?? n.browseName.name);
+      if ((n.definition?.fields ?? []).some(f => names(f.dataType))) users.push(n.browseName.name);
+    }
+    if (users.length === 0 || !used) return;
+    throw new EditError(users.length === 1
+      ? msg`'${used.browseName.name}' is the DataType of '${users[0]}'; give it another DataType first.`
+      : msg`'${used.browseName.name}' is the DataType of '${users[0]}' and ${users.length - 1} more; give them another DataType first.`);
   }
 
   /** A node and what it holds as its own (its ParentNodeId), not what it merely organizes. */
