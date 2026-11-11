@@ -40,6 +40,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- Deleting a state that holds a machine of its own left the machine
+  (`<State>StateMachine`) behind on the machine type; it now goes with the
+  state.
 - Apply in the fields of a DataType dropped a field's ArrayDimensions and
   DisplayName, which the reader keeps apart from its other attributes; a new
   supertype dropped AllowSubTypes. They now stay with the field's name, the

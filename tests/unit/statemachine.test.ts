@@ -162,6 +162,21 @@ describe('Sub-state machines', () => {
     expect(ws.editable!.nodes.flatMap(n => n.references).some(r => r.target === replaced)).toBe(false);
   });
 
+  // The machine a state held stayed behind, a component of the type nothing explained.
+  it('deletes the machine a state holds along with the state, and undo brings both back', async () => {
+    const { ws, e, main, running, sub } = await machines();
+    const object = e.setSubStateMachine(main, running, sub)!;
+
+    const gone = e.delete(running);
+
+    expect(gone).toContain(object);
+    expect(ws.space.get(object)).toBeUndefined();
+    expect(ws.space.children(ws.space.get(main)!).map(c => c.node.browseName.name)).not.toContain('RunningStateMachine');
+    e.undo();
+    expect(ws.space.get(object)?.browseName.name).toBe('RunningStateMachine');
+    expect(ws.space.get(running)).toBeDefined();
+  });
+
   it('marks a state that holds a machine in the chart, with the type of that machine', async () => {
     const { ws, e, main, running, sub } = await machines();
     e.setSubStateMachine(main, running, sub);

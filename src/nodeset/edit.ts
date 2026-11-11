@@ -1273,6 +1273,16 @@ export class ModelEditor {
     return this.change(() => {
       const root = this.node(key);
       const doomed = this.ownedSubtree(root);
+      // The machine a state holds is a component of the machine type, not of
+      // the state (HasSubStateMachine); it goes with the state, with what it holds.
+      for (const pending = [...doomed]; pending.length > 0;) {
+        for (const e of this.space().out(pending.pop()!, SM.HasSubStateMachine, false)) {
+          if (!this.owns(e.target) || doomed.has(e.target)) continue;
+          for (const k of this.ownedSubtree(this.node(e.target))) {
+            if (!doomed.has(k)) { doomed.add(k); pending.push(k); }
+          }
+        }
+      }
       // A DataType's encodings go with it.
       for (const key of [...doomed]) {
         for (const e of this.space().out(key, HAS_ENCODING, false)) if (this.owns(e.target)) doomed.add(e.target);

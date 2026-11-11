@@ -527,6 +527,7 @@ types of your model and of the loaded models besides the base model, except
 this type and its subtypes. The modeler adds a Mandatory component
 `<State>StateMachine` of that type, which the state refers to with
 HasSubStateMachine. Another machine type replaces it; **(none)** removes it.
+Deleting the state deletes its machine as well.
 
 ### The state chart
 
