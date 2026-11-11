@@ -505,6 +505,7 @@ function labelOf(n: UaNode): string {
 
 /** Creates an instance of a type: a name and the Optional declarations to include. */
 const OBJECTS = uaKey(85);
+const DATA_TYPE_ENCODING = uaKey(76);
 
 /** The last part of a model URI: DI for http://opcfoundation.org/UA/DI/. */
 function modelName(uri: string): string {
@@ -527,7 +528,7 @@ function placeName(space: AddressSpace, n: UaNode): string {
  * there for others to fill (DI's DeviceSet, say), and the model's own
  * instances. The base model's objects (Server and the like) are left out.
  */
-function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
+export function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string; label: string }[] {
   const places = [{ key: '', label: t('Objects folder') }];
   const objects = space.get(OBJECTS);
   for (const c of objects ? space.children(objects) : []) {
@@ -536,7 +537,9 @@ function instancePlaces(space: AddressSpace, editor: ModelEditor): { key: string
     places.push({ key: n.id, label: `${text(n.displayName) || n.browseName.name} (${modelName(n.browseName.namespaceUri)})` });
   }
   for (const n of editor.file.nodes) {
-    if (n.nodeClass === 'Object' && !insideType(space, n)) places.push({ key: n.id, label: placeName(space, n) });
+    // Not the encodings of a DataType: Objects too, but outside the hierarchy and of no use as a place.
+    const encoding = space.isSubtypeOf(space.typeDefinition(n)?.id ?? '', DATA_TYPE_ENCODING);
+    if (n.nodeClass === 'Object' && !encoding && space.parentOf(n) && !insideType(space, n)) places.push({ key: n.id, label: placeName(space, n) });
   }
   return places;
 }

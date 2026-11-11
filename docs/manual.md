@@ -548,8 +548,9 @@ the types of loaded models (FolderType, a DI type and so on).
   below another).
 - **Place**: where the instance goes: the Objects folder, the nodes loaded
   models put there for others to fill (such as **DeviceSet (DI)** once DI
-  is loaded), or an instance of your model. A node of another model stays
-  as it is; the new instance alone holds the reference.
+  is loaded), or an Object instance of your model (not the encodings of a
+  DataType, which are Objects too). A node of another model stays as it is;
+  the new instance alone holds the reference.
 - **Name of the instance**, then **Create**. For an abstract type **Create**
   stays disabled ("Abstract types have no instances.").
 

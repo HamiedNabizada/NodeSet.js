@@ -40,6 +40,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- The encodings of a DataType ("Default Binary", "Default XML", "Default
+  JSON") were offered as places for a new instance. They are not any more.
 - An instance placed below a node of a loaded model, such as DI's DeviceSet,
   was missing from the list of instances, so it could not be found again. The
   list now holds every instance that no node of the model holds.

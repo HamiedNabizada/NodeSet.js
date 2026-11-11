@@ -1,4 +1,5 @@
 import { topInstances } from '../../src/ui/instances';
+import { instancePlaces } from '../../src/ui/Sections';
 import { Workspace } from '../../src/workspace';
 
 const DI = 'http://opcfoundation.org/UA/DI/';
@@ -25,5 +26,12 @@ describe('The instances of a model', () => {
     e.instantiate(pump, 'Inner', { parent: pump1 });
 
     expect(topInstances(ws.space, ws.editable!).map(n => n.browseName.name).sort()).toEqual(['Pump1', 'Pump2']);
+  });
+
+  // "Default Binary", "Default XML" and "Default JSON" were offered as places.
+  it('offers no encoding of a DataType as the place of a new instance', async () => {
+    const { ws, e } = await plant();
+
+    expect(instancePlaces(ws.space, e).map(p => p.label)).toEqual(['Objects folder', 'DeviceSet (DI)', 'NetworkSet (DI)', 'DeviceTopology (DI)', 'Pump1']);
   });
 });
