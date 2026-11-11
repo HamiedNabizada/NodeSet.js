@@ -14,6 +14,7 @@
 
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
+import { readStateMachine } from './statemachine';
 import { builtInOf, matrixXml, structureOf, structureValue, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
@@ -792,9 +793,9 @@ export class ModelEditor {
       const t = this.machineType(type);
       const s = this.namedChild(t, name, 'Object', SM.TransitionType);
       this.numberProperty(s, SM.TransitionNumber, number);
-      this.transitionEnd(s, SM.FromState, from);
-      this.transitionEnd(s, SM.ToState, to);
-      if (cause) this.transitionEnd(s, SM.HasCause, cause);
+      this.transitionEnd(t, s, SM.FromState, from);
+      this.transitionEnd(t, s, SM.ToState, to);
+      if (cause) this.transitionEnd(t, s, SM.HasCause, cause);
       return s.id;
     });
   }
@@ -806,9 +807,10 @@ export class ModelEditor {
   setTransition(transition: string, ends: { from?: string; to?: string; cause?: string }): void {
     this.change(() => {
       const s = this.node(transition);
-      if ('from' in ends) this.transitionEnd(s, SM.FromState, ends.from);
-      if ('to' in ends) this.transitionEnd(s, SM.ToState, ends.to);
-      if ('cause' in ends) this.transitionEnd(s, SM.HasCause, ends.cause);
+      const machine = this.space().parentOf(s);
+      if ('from' in ends) this.transitionEnd(machine, s, SM.FromState, ends.from);
+      if ('to' in ends) this.transitionEnd(machine, s, SM.ToState, ends.to);
+      if ('cause' in ends) this.transitionEnd(machine, s, SM.HasCause, ends.cause);
     });
   }
 
@@ -852,8 +854,12 @@ export class ModelEditor {
     p.valueXml = valueXml('UInt32', String(Math.trunc(value)), false);
   }
 
-  /** One FromState, ToState or HasCause of a transition, with the inverse on the other node. */
-  private transitionEnd(transition: UaNode, type: string, target: string | undefined): void {
+  /**
+   * One FromState, ToState or HasCause of a transition, with the inverse on
+   * the other node. An end is a state of the transition's machine, its own or
+   * one it inherits.
+   */
+  private transitionEnd(machine: UaNode | undefined, transition: UaNode, type: string, target: string | undefined): void {
     for (const old of transition.references.filter(r => r.type === type && r.isForward)) {
       const node = this.file.nodes.find(n => n.id === old.target);
       if (node) node.references = node.references.filter(r => !(r.type === type && !r.isForward && r.target === transition.id));
@@ -862,7 +868,7 @@ export class ModelEditor {
     if (!target) return;
     const node = this.space().get(target);
     if (!node) throw new EditError(msg`The node of the reference is unknown.`);
-    if (type !== SM.HasCause && !this.space().isSubtypeOf(node.references.find(r => r.type === REF.HasTypeDefinition)?.target ?? '', SM.StateType)) {
+    if (type !== SM.HasCause && !(machine && readStateMachine(this.space(), machine).states.some(s => s.key === target))) {
       throw new EditError(msg`'${node.browseName.name}' is no state of this machine.`);
     }
     if (type === SM.HasCause && node.nodeClass !== 'Method') throw new EditError(msg`'${node.browseName.name}' is no method.`);

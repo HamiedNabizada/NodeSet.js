@@ -16,6 +16,12 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- What the panel held for one node carried over to the next: unapplied
+  arguments shown and applied to another method after "Drop them?", the name
+  of a child to add, Optional picks, the transition form. Each node now gets
+  a panel of its own. Clicking the node you are on, or a redraw of the canvas,
+  no longer asks to drop unapplied changes. A transition's ends must be states
+  of its own machine (or ones it inherits), not of any machine.
 - Inside a host, an edit made while the host imported or saved the model
   counted as saved once the host answered. With a host that echoes `change`
   it stays unsaved, and the status line says so.

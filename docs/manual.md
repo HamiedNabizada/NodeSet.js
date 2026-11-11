@@ -168,7 +168,9 @@ Some sections are edited as a whole: the arguments of a method, the fields
 of a DataType and a structure value. Their changes wait until you click
 **Apply**, and **Discard** drops them. Selecting another node, saving or
 applying the model to a document while such changes wait asks first
-("…: changes not applied yet. Drop them?").
+("…: changes not applied yet. Drop them?"). Clicking the node you are on, or
+a change that redraws the canvas, asks nothing. The panel of another node
+starts afresh: nothing you typed or picked for one node reaches the next.
 
 At the bottom, a type has **Show diagram**, and every node of your model has
 **Delete**.

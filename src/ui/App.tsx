@@ -277,9 +277,9 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     changed();
   }, [workspace, changed]);
 
-  /** Another node, once its unapplied drafts may go. */
+  /** Another node, once its unapplied drafts may go; staying on the node asks nothing. */
   const select = useCallback((key: string | undefined, show?: string) => {
-    if (!mayLeaveDrafts()) return;
+    if (key !== selectedRef.current && !mayLeaveDrafts()) return;
     if (show !== undefined) setShown(show);
     setSelected(key);
   }, []);
@@ -376,7 +376,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         onOk: name => runRef.current(() => {
           const parent = workspace.space.get(key)!;
           const declaration = parent.nodeClass.endsWith('Type') || insideType(workspace.space, parent);
-          setSelected(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
+          select(workspace.editor!.addDeclaration(key, kind, name, declaration ? RULE.Mandatory : undefined));
         }),
       }),
       addReference: (source, target) => setAsk({
@@ -391,7 +391,8 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       }),
       remove: key => runRef.current(() => workspace.editor!.delete(key)),
     });
-    modeler.onSelect(key => { if (key) select(key); });
+    // A redraw selects the selected node again; that is no step to another node.
+    modeler.onSelect(key => { if (key && key !== selectedRef.current) select(key); });
     modeler.onOpen(key => {
       if (!mayLeaveDrafts()) return;
       const node = workspace.space.get(key);
@@ -463,8 +464,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       title: t('Name of the new {0}', nodeClass),
       onOk: name => run(() => {
         const key = workspace.editor!.addType(nodeClass, name);
-        setShown(key);
-        setSelected(key);
+        select(key, key);
       }),
     });
   };
@@ -475,8 +475,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       title: t('Name of the new state machine type'),
       onOk: name => run(() => {
         const key = workspace.editor!.addStateMachineType(name);
-        setShown(key);
-        setSelected(key);
+        select(key, key);
       }),
     });
   };
@@ -575,8 +574,9 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         <div className="side right">
           <Guard name={t('The node editor')} resetKey={selected}>
             {workspace && editor && selected && workspace.space.get(selected)
-              ? <NodeEditor space={workspace.space} editor={editor} nodeKey={selected} run={run}
-                  onOpenType={key => select(key, key)} onCreated={key => setSelected(key)}
+              // A node of its own: nothing typed into the panel of one node reaches the next.
+              ? <NodeEditor key={selected} space={workspace.space} editor={editor} nodeKey={selected} run={run}
+                  onOpenType={key => select(key, key)} onCreated={key => select(key)}
                   onInstance={key => select(key, key)} />
               : workspace?.editable
                 ? <ModelPanel workspace={workspace} run={run} onLoaded={(text, warn) => { bump(); setStatus({ text, warn }); }} />
