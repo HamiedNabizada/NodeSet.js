@@ -159,7 +159,8 @@ describe('The node editor', () => {
     const pump = ws.editor!.addType('ObjectType', 'PumpType');
     const speed = ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
     show(ws, speed);
-    const group = (name: string) => Array.from(host.querySelectorAll('.field')).find(f => f.querySelector('span')?.textContent === name)!;
+    // Labels may break before an inner word (U+200B); they read the same.
+    const group = (name: string) => Array.from(host.querySelectorAll('.field')).find(f => f.querySelector('span')?.textContent?.replace(/​/g, '') === name)!;
     const box = (name: string, label: string) => Array.from(group(name).querySelectorAll('label')).find(l => l.textContent === label)!.querySelector('input')!;
 
     expect(box('AccessLevel', 'read').checked).toBe(true);
@@ -172,6 +173,8 @@ describe('The node editor', () => {
     show(ws, speed);
     expect(box('AccessLevel', 'write').checked).toBe(true);
     expect(box('UserAccessLevel', 'write').checked).toBe(false);
+    // Too long for the label column in one piece: it breaks between its words, not inside one.
+    expect(group('MinimumSamplingInterval').querySelector('span')!.textContent).toBe('Minimum​Sampling​Interval');
   });
 
   // A refused state or transition took the typed name with it.

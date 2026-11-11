@@ -212,8 +212,7 @@ function AccessFields({ editor, node, own, run }: { editor: ModelEditor; node: U
         <input type="checkbox" checked={node.otherAttributes.Historizing === 'true'} disabled={!own}
           onChange={e => run(() => editor.setAccess(node.id, { historizing: e.target.checked }))} />
       </Group>
-      {/* Break opportunities between its words: the label column is narrow. */}
-      <Field label={'Minimum\u200BSampling\u200BInterval'} hint={t('ms; -1 not known, 0 continuously')}>
+      <Field label="MinimumSamplingInterval" hint={t('ms; -1 not known, 0 continuously')}>
         <TextInput value={node.otherAttributes.MinimumSamplingInterval ?? ''} disabled={!own} placeholder={t('ms')}
           onCommit={v => run(() => editor.setAccess(node.id, { minimumSamplingInterval: v.trim() === '' ? undefined : Number(v) }))} />
       </Field>
@@ -223,7 +222,7 @@ function AccessFields({ editor, node, own, run }: { editor: ModelEditor; node: U
 
 /** A row like Field for several controls, each with a label of its own, which a label around them all would confuse. */
 function Group({ label: title, children }: { label: string; children: React.ReactNode }) {
-  return <div className="field"><span>{title}</span><div className="checks">{children}</div></div>;
+  return <div className="field"><span>{breakable(title)}</span><div className="checks">{children}</div></div>;
 }
 
 function canHoldChildren(c: NodeClass): boolean {
@@ -291,7 +290,16 @@ function AddSubtype({ editor, type, run, onCreated }: { editor: ModelEditor; typ
 }
 
 function Field({ label: title, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return <label className="field" title={hint}><span>{title}</span><div>{children}</div></label>;
+  return <label className="field" title={hint}><span>{breakable(title)}</span><div>{children}</div></label>;
+}
+
+/**
+ * The label column is narrow: an attribute name too long for it, such as
+ * MinimumSamplingInterval, may break before each of its inner words, not in
+ * the middle of one. Shorter labels stay as they are.
+ */
+function breakable(label: string): string {
+  return label.length > 18 ? label.replace(/([a-z])([A-Z])/g, '$1​$2') : label;
 }
 
 /** A text field that commits on Enter or when it loses focus. */
