@@ -133,6 +133,34 @@ describe('Editing a model', () => {
   });
 });
 
+describe('Access to a variable', () => {
+  it('sets AccessLevel, UserAccessLevel, Historizing and MinimumSamplingInterval, writes them and hands them to instances', async () => {
+    const { ws, editor, pump, speed } = await pumpModel();
+
+    editor.setAccess(speed, { accessLevel: 3, userAccessLevel: 1, historizing: true, minimumSamplingInterval: 100 });
+
+    const node = ws.space.get(speed)!;
+    expect(node.accessLevel).toBe(3);
+    expect(node.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+    const again = readNodeSet(ws.save()).nodes.find(n => n.id === speed)!;
+    expect(again.accessLevel).toBe(3);
+    expect(again.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+    const pump1 = editor.instantiate(pump, 'Pump1');
+    const speed1 = ws.space.children(ws.space.get(pump1)!).find(c => c.node.browseName.name === 'Speed')!.node;
+    expect(speed1.accessLevel).toBe(3);
+    expect(speed1.otherAttributes).toEqual({ Historizing: 'true', MinimumSamplingInterval: '100' });
+
+    // The defaults of the schema are not written.
+    editor.setAccess(speed, { accessLevel: 1, userAccessLevel: 2, historizing: false, minimumSamplingInterval: undefined });
+    expect(ws.space.get(speed)!.accessLevel).toBeUndefined();
+    expect(ws.space.get(speed)!.otherAttributes).toEqual({ UserAccessLevel: '2' });
+
+    expect(() => editor.setAccess(pump, { accessLevel: 3 })).toThrow(EditError);
+    expect(() => editor.setAccess(speed, { accessLevel: 300 })).toThrow(EditError);
+    expect(() => editor.setAccess(speed, { minimumSamplingInterval: Number('fast') })).toThrow(EditError);
+  });
+});
+
 describe('Editing methods and data types', () => {
   it('gives a method InputArguments and OutputArguments that survive saving', async () => {
     const { ws, editor, start } = await pumpModel();

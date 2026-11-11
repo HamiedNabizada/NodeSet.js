@@ -8,6 +8,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- AccessLevel and UserAccessLevel (read, write), Historizing and
+  MinimumSamplingInterval of a variable in the panel (`setAccess` in the
+  editor). The defaults of the schema are not written; an instance takes
+  them from its declaration.
 - Keyboard: Delete deletes the shape selected on the canvas; Ctrl+S saves
   the NodeSet (inside a host it applies the model to the document, as the
   toolbar's first button does) instead of the browser saving the page;

@@ -104,6 +104,27 @@ describe('The node editor', () => {
     expect(ws.space.out(pump).map(e => e.target)).toContain(`${DI}|i=1002`);
   });
 
+  it('lets a variable be written, historized and sampled from the panel', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Types/');
+    const pump = ws.editor!.addType('ObjectType', 'PumpType');
+    const speed = ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
+    show(ws, speed);
+    const group = (name: string) => Array.from(host.querySelectorAll('.field')).find(f => f.querySelector('span')?.textContent === name)!;
+    const box = (name: string, label: string) => Array.from(group(name).querySelectorAll('label')).find(l => l.textContent === label)!.querySelector('input')!;
+
+    expect(box('AccessLevel', 'read').checked).toBe(true);
+    expect(box('AccessLevel', 'write').checked).toBe(false);
+    act(() => box('AccessLevel', 'write').click());
+    act(() => (group('Historizing').querySelector('input') as HTMLInputElement).click());
+
+    expect(ws.space.get(speed)!.accessLevel).toBe(3);
+    expect(ws.space.get(speed)!.otherAttributes.Historizing).toBe('true');
+    show(ws, speed);
+    expect(box('AccessLevel', 'write').checked).toBe(true);
+    expect(box('UserAccessLevel', 'write').checked).toBe(false);
+  });
+
   // A refused state or transition took the typed name with it.
   it('keeps the name of a state or transition the model refuses', async () => {
     const ws = new Workspace();

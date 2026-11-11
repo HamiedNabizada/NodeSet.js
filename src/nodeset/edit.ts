@@ -71,6 +71,8 @@ const ENUM_VALUE_TYPE = uaKey(7594);
 const OPTION_SET = uaKey(12755);
 const UNION = uaKey(12756);
 const UINTEGER = uaKey(28);
+/** What an instance takes over from its declaration of how its value is read, written and sampled, besides AccessLevel. */
+const ACCESS_ATTRIBUTES = ['UserAccessLevel', 'Historizing', 'MinimumSamplingInterval'];
 /** Bits of the unsigned integers an OptionSet can be a subtype of. */
 const BITS: Record<string, number> = { [uaKey(3)]: 8, [uaKey(5)]: 16, [uaKey(7)]: 32, [uaKey(9)]: 64 };
 
@@ -627,6 +629,44 @@ export class ModelEditor {
     }
   }
 
+  /**
+   * Who may read and write a variable's value (AccessLevel, UserAccessLevel:
+   * bit 0 read, bit 1 write …), whether the server keeps its history
+   * (Historizing), and how fast it samples (MinimumSamplingInterval, in ms; -1
+   * for not known, 0 for continuously). A field left out stays; the defaults
+   * of the schema (1, 1, false, none) are not written.
+   */
+  setAccess(key: string, access: { accessLevel?: number; userAccessLevel?: number; historizing?: boolean; minimumSamplingInterval?: number }): void {
+    this.change(() => {
+      const n = this.node(key);
+      if (n.nodeClass !== 'Variable') throw new EditError(msg`Only a Variable has an AccessLevel.`);
+      const byte = (value: number | undefined) => {
+        if (value === undefined || !Number.isInteger(value) || value < 0 || value > 255) throw new EditError(msg`An access level is a number from 0 to 255.`);
+        return value;
+      };
+      if ('accessLevel' in access) {
+        const level = byte(access.accessLevel);
+        n.accessLevel = level === 1 ? undefined : level;
+      }
+      const attributes = { ...n.otherAttributes };
+      if ('userAccessLevel' in access) {
+        const level = byte(access.userAccessLevel);
+        if (level === 1) delete attributes.UserAccessLevel; else attributes.UserAccessLevel = String(level);
+      }
+      if ('historizing' in access) {
+        if (access.historizing) attributes.Historizing = 'true'; else delete attributes.Historizing;
+      }
+      if ('minimumSamplingInterval' in access) {
+        const interval = access.minimumSamplingInterval;
+        if (interval !== undefined && (!Number.isFinite(interval) || interval < -1)) {
+          throw new EditError(msg`A sampling interval is a number of milliseconds, -1 or more.`);
+        }
+        if (interval === undefined) delete attributes.MinimumSamplingInterval; else attributes.MinimumSamplingInterval = String(interval);
+      }
+      n.otherAttributes = attributes;
+    });
+  }
+
   /** ReferenceType: a symmetric type has no InverseName. */
   setSymmetric(key: string, symmetric: boolean): void {
     this.change(() => {
@@ -1144,6 +1184,7 @@ export class ModelEditor {
       c.valueRank = d.valueRank;
       c.arrayDimensions = d.arrayDimensions;
       c.accessLevel = d.accessLevel;
+      for (const name of ACCESS_ATTRIBUTES) if (d.otherAttributes[name] !== undefined) c.otherAttributes[name] = d.otherAttributes[name];
       c.valueXml = d.valueXml;
       c.arguments = d.arguments ? structuredClone(d.arguments) : undefined;
       c.extensionObjects = d.extensionObjects ? structuredClone(d.extensionObjects) : undefined;

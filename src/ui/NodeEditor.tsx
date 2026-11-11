@@ -96,6 +96,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
             </select>
           </Field>
           {!node.arguments && <ValueField space={space} editor={editor} node={node} own={own} run={run} />}
+          {node.nodeClass === 'Variable' && <AccessFields editor={editor} node={node} own={own} run={run} />}
         </>
       )}
       {node.nodeClass === 'ReferenceType' && (
@@ -179,6 +180,43 @@ function ValueField({ space, editor, node, own, run }: { space: AddressSpace; ed
       )}
     </>
   );
+}
+
+/**
+ * Who may read and write the value (the first two bits of AccessLevel and
+ * UserAccessLevel; the other bits stay as they are), whether its history is
+ * kept, and how fast it is sampled. Absent attributes show the schema's
+ * defaults: read only, not historized, no interval.
+ */
+function AccessFields({ editor, node, own, run }: { editor: ModelEditor; node: UaNode; own: boolean; run: Props['run'] }) {
+  const level = node.accessLevel ?? 1;
+  const user = Number(node.otherAttributes.UserAccessLevel ?? 1);
+  const bits = (name: 'accessLevel' | 'userAccessLevel', value: number) => [[1, t('read')], [2, t('write')]].map(([bit, label]) => (
+    <label key={bit} className="check">
+      <input type="checkbox" checked={(value & (bit as number)) !== 0} disabled={!own}
+        onChange={e => run(() => editor.setAccess(node.id, { [name]: e.target.checked ? value | (bit as number) : value & ~(bit as number) }))} />
+      {label}
+    </label>
+  ));
+  return (
+    <>
+      <Group label="AccessLevel">{bits('accessLevel', level)}</Group>
+      <Group label="UserAccessLevel">{bits('userAccessLevel', user)}</Group>
+      <Group label="Historizing">
+        <input type="checkbox" checked={node.otherAttributes.Historizing === 'true'} disabled={!own}
+          onChange={e => run(() => editor.setAccess(node.id, { historizing: e.target.checked }))} />
+      </Group>
+      <Field label="MinimumSamplingInterval">
+        <TextInput value={node.otherAttributes.MinimumSamplingInterval ?? ''} disabled={!own} placeholder={t('ms; -1 not known, 0 continuously')}
+          onCommit={v => run(() => editor.setAccess(node.id, { minimumSamplingInterval: v.trim() === '' ? undefined : Number(v) }))} />
+      </Field>
+    </>
+  );
+}
+
+/** A row like Field for several controls, each with a label of its own, which a label around them all would confuse. */
+function Group({ label: title, children }: { label: string; children: React.ReactNode }) {
+  return <div className="field"><span>{title}</span><div className="checks">{children}</div></div>;
 }
 
 function canHoldChildren(c: NodeClass): boolean {

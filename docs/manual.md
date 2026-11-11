@@ -323,6 +323,13 @@ the DataType BaseDataType and the ValueRank Scalar.
 - **ModellingRule**: the four rules and **(none)**. The diagram shows the
   rule as the cardinality at the held node.
 - **DataType**, **ValueRank** and **Value**: see [Values](#values).
+- **AccessLevel** and **UserAccessLevel** (Variables): **read** and
+  **write**, who may read and write the value; the other bits of the level
+  stay as they were read. **Historizing**: the server keeps the value's
+  history. **MinimumSamplingInterval**: how fast the server can sample the
+  value, in milliseconds (-1 not known, 0 continuously); empty for none.
+  Without a change a variable can be read, not written, as the schema says.
+  An instance takes these from its declaration.
 
 A placeholder (MandatoryPlaceholder, OptionalPlaceholder) of an Object or
 Variable is named in angle brackets, such as `<Pump>`; the checks warn when
@@ -739,8 +746,9 @@ What the modeler does not edit, or edits only in part:
 - **NodeIds** are assigned by the modeler, numbers from 1000 upward, and
   cannot be changed.
 - **Attributes without a field** in the panel, such as the DisplayName apart
-  from the name, texts in further locales, AccessLevel, ArrayDimensions and
-  SymbolicName, are kept as they were read.
+  from the name, texts in further locales, the bits of AccessLevel beyond
+  read and write, ArrayDimensions and SymbolicName, are kept as they were
+  read.
 - **DataType fields**: their descriptions, the descriptions of enumeration
   values, and what else a field carries (MaxStringLength, its DisplayName,
   its ArrayDimensions while it stays an array of the same ValueRank) are
