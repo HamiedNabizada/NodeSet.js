@@ -3,12 +3,12 @@
 // hierarchy. Arguments, fields and structure values are edited as a draft
 // and applied as one undo step.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useDraft } from './drafts';
 import { isStateMachineType, MachineTransition, nextNumber, readStateMachine, StateMachine, stateChartSvg } from '../nodeset/statemachine';
 import { AddressSpace, REF } from '../nodeset/address-space';
 import { fieldKind, FieldKind, ModelEditor } from '../nodeset/edit';
-import { Argument, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
+import { Argument, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from '../nodeset/model';
 import { insideType } from '../nodeset/checks';
 import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
@@ -432,10 +432,6 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
   const [type, setType] = useState<string>();
   const [target, setTarget] = useState<string>();
   const name = (key: string) => { const n = space.get(key); return n ? text(n.displayName) || n.browseName.name : key; };
-  const targets = useMemo(() => editor.file.nodes
-    .filter(n => n.id !== node.id)
-    .map(n => ({ key: n.id, label: pathOf(space, n) }))
-    .sort((a, b) => a.label.localeCompare(b.label)), [space, editor.file, node.id]);
 
   return (
     <fieldset className="add">
@@ -449,14 +445,62 @@ export function ReferencesSection({ space, editor, node, run }: { space: Address
       ))}
       <TypePicker space={space} nodeClass="ReferenceType" value={type} onPick={setType} placeholder={t('ReferenceType …')} />
       <div className="row">
-        <select value={target ?? ''} onChange={e => setTarget(e.target.value || undefined)}>
-          <option value="">{t('Target …')}</option>
-          {targets.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-        </select>
+        <NodePicker space={space} exclude={node.id} onPick={setTarget} placeholder={t('Target …')} />
         <button disabled={!type || !target} onClick={() => run(() => editor.addReference(node.id, type!, target!))}>{t('Add')}</button>
       </div>
     </fieldset>
   );
+}
+
+/** At most this many nodes are offered; more letters narrow them. */
+const MAX_MATCHES = 50;
+
+/**
+ * Picks any node of the loaded models by name: from two letters on, the
+ * nodes whose name holds them are offered with their path and model, the
+ * model's own first. The list is built as you type, not for every node.
+ */
+function NodePicker({ space, exclude, onPick, placeholder }: {
+  space: AddressSpace; exclude?: string; onPick: (key: string | undefined) => void; placeholder?: string;
+}) {
+  const [value, setValue] = useState('');
+  const [query, setQuery] = useState('');
+  // React's ids hold colons, which a selector for the list does not take.
+  const listId = `nodes-${useId().replace(/[^\w-]/g, '')}`;
+  const nodes = useMemo(() => [...space.all()].map(n => ({ n, name: labelOf(n).toLowerCase(), browse: n.browseName.name.toLowerCase() })), [space]);
+  const matches = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (needle.length < 2) return [];
+    const own = (n: UaNode) => (space.fileOf(n.id)?.editable ? 0 : 1);
+    const starts = (n: UaNode) => (labelOf(n).toLowerCase().startsWith(needle) ? 0 : 1);
+    const hits = nodes.filter(x => x.n.id !== exclude && (x.name.includes(needle) || x.browse.includes(needle))).map(x => x.n);
+    hits.sort((a, b) => own(a) - own(b) || starts(a) - starts(b) || labelOf(a).length - labelOf(b).length || labelOf(a).localeCompare(labelOf(b)));
+    const options = hits.slice(0, MAX_MATCHES)
+      .map(n => ({ key: n.id, label: `${pathOf(space, n)} (${modelName(parseNodeIdKey(n.id).namespaceUri)})` }));
+    // Two nodes of one path and model are told apart by their NodeId.
+    const count = new Map<string, number>();
+    for (const o of options) count.set(o.label, (count.get(o.label) ?? 0) + 1);
+    return options.map(o => (count.get(o.label)! > 1 ? { ...o, label: `${o.label} ${parseNodeIdKey(o.key).identifier}` } : o));
+  }, [nodes, query, exclude, space]);
+
+  const change = (typed: string) => {
+    setValue(typed);
+    const hit = matches.find(m => m.label === typed);
+    if (hit) { onPick(hit.key); return; }
+    setQuery(typed);
+    onPick(undefined);
+  };
+  return (
+    <>
+      <input list={listId} value={value} placeholder={placeholder} title={t('Type two letters or more of the name; any loaded model.')}
+        onChange={e => change(e.target.value)} />
+      <datalist id={listId}>{matches.map(m => <option key={m.key} value={m.label} />)}</datalist>
+    </>
+  );
+}
+
+function labelOf(n: UaNode): string {
+  return text(n.displayName) || n.browseName.name;
 }
 
 /** Creates an instance of a type: a name and the Optional declarations to include. */

@@ -211,6 +211,7 @@ export const de: Record<string, string> = {
   "Two fields are named '{0}'.": "Zwei Felder heißen '{0}'.",
   "Two fields of a DataType have the same name, or two values the same number.": "Zwei Felder eines DataTypes haben denselben Namen, oder zwei Werte dieselbe Zahl.",
   "Two options are the same.": "Zwei Optionen sind gleich.",
+  "Type two letters or more of the name; any loaded model.": "Tippe zwei oder mehr Buchstaben des Namens; jedes geladene Modell.",
   "Types of required models": "Typen benötigter Modelle",
   "Undo": "Rückgängig",
   "Unknown node.": "Unbekannter Knoten.",

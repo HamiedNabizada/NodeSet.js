@@ -75,6 +75,35 @@ describe('The node editor', () => {
     expect(ws.space.get(speed)!.valueXml).toBeUndefined();
   });
 
+  // The target was a list of every node of the model (9624 on Pumps), none of another model.
+  it('finds the target of a reference by name, in every loaded model', async () => {
+    const DI = 'http://opcfoundation.org/UA/DI/';
+    const ws = new Workspace();
+    await ws.create('http://example.org/Plant/');
+    await ws.addBundled(DI);
+    const pump = ws.editor!.addType('ObjectType', 'PumpType');
+    show(ws, pump);
+    const section = Array.from(host.querySelectorAll('fieldset')).find(f => f.querySelector('legend')?.textContent === 'References')!;
+    const input = (placeholder: string) => section.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement;
+    const options = () => Array.from(section.querySelectorAll(`datalist[id="${input('Target …').getAttribute('list')}"] option`),
+      o => (o as HTMLOptionElement).value);
+    const typeInto = (field: HTMLInputElement, value: string) => act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    typeInto(input('ReferenceType …'), 'GeneratesEvent');
+    act(() => { input('ReferenceType …').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(options()).toEqual([]);
+    typeInto(input('Target …'), 'devicet');
+    expect(options()).toContain('DeviceType (DI)');
+    expect(options().length).toBeLessThanOrEqual(50);
+    typeInto(input('Target …'), 'DeviceType (DI)');
+    act(() => { Array.from(section.querySelectorAll('button')).find(b => b.textContent === 'Add')!.click(); });
+
+    expect(ws.space.out(pump).map(e => e.target)).toContain(`${DI}|i=1002`);
+  });
+
   it('gives a state a machine of its own from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Machine/');

@@ -479,9 +479,11 @@ starts at a node of your model and may lead to any node on the diagram.
 In the panel, the section **References** lists the node's references
 besides the hierarchy, the type system and the ModellingRule, or says "None
 besides the hierarchy." **×** removes one. To add one, type the
-ReferenceType into the field **ReferenceType …**, choose the node it leads
-to from **Target …** (the nodes of your model, by their path, such as
-`PumpType/Impeller`) and click **Add**.
+ReferenceType into the field **ReferenceType …**, type two letters or more
+of the name of the node it leads to into **Target …** and choose it from the
+nodes offered (any node of any loaded model, by its path and model, such as
+`PumpType/Impeller (Pump)` or `DeviceType (DI)`; the nodes of your model
+come first, at most 50 at a time), then click **Add**.
 
 The diagram draws such references on rails to the right of the shapes,
 with their name. In the example, `Motor` drives `Impeller`.

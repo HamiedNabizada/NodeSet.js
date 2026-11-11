@@ -19,6 +19,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Changed
 
+- The target of a reference in the panel is found by name in every loaded
+  model: two letters or more offer up to 50 matching nodes with their path
+  and model, the model's own first. Before, the list held every node of the
+  model (9624 on Pumps, built at each redraw) and none of another model.
 - Host protocol: "apply" and "save" carry `change`, the number of the last
   change the NodeSet holds. A host that echoes it in "applied" or "saved"
   (`{ type, ok, text, change }`) lets the modeler count the model as
