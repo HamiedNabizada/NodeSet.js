@@ -186,6 +186,36 @@ describe('The node editor', () => {
     expect(field('New transition').value).toBe('Go');
   });
 
+  // The ends of a transition could only be changed by removing it and adding it again.
+  it('changes the ends and the cause of a transition in place', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Machine/');
+    const e = ws.editor!;
+    const machine = e.addStateMachineType('PumpStateMachineType');
+    const start = e.addDeclaration(machine, 'Method', 'Start');
+    const idle = e.addState(machine, 'Idle', 1);
+    const running = e.addState(machine, 'Running', 2);
+    const go = e.addTransition(machine, 'IdleToRunning', 1, idle, running, start);
+    show(ws, machine);
+    const item = () => Array.from(host.querySelectorAll('ul.machine li')).find(li => li.textContent?.includes('IdleToRunning'))!;
+    act(() => (item().querySelector('button[title="Change ends and cause"]') as HTMLButtonElement).click());
+    const selects = () => Array.from(item().querySelectorAll('select'));
+    expect(selects().map(s => s.value)).toEqual([idle, running, start]);
+
+    act(() => {
+      selects()[1].value = idle;
+      selects()[1].dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    show(ws, machine);
+    act(() => {
+      selects()[2].value = '';
+      selects()[2].dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const transition = readStateMachine(ws.space, ws.space.get(machine)!).transitions.find(t => t.key === go)!;
+    expect([transition.from, transition.to, transition.cause]).toEqual([idle, idle, undefined]);
+  });
+
   it('gives a state a machine of its own from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Machine/');

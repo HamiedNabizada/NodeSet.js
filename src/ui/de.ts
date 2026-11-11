@@ -85,6 +85,7 @@ export const de: Record<string, string> = {
   "Bits are integers.": "Bits sind ganze Zahlen.",
   "Bits of '{0}' are 0 to {1}.": "Die Bits von '{0}' reichen von 0 bis {1}.",
   "Cancel": "Abbrechen",
+  "Change ends and cause": "Enden und Auslöser ändern",
   "Changed. Save to keep the NodeSet.": "Geändert. Speichern, um das NodeSet zu behalten.",
   "Checks failed": "Prüfung fehlgeschlagen",
   "Checks: {0} error(s), {1} warning(s)": "Prüfung: {0} Fehler, {1} Warnung(en)",

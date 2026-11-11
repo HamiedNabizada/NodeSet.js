@@ -332,6 +332,8 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
     .filter(n => isStateMachineType(space, n) && n.browseName.namespaceUri !== UA_NAMESPACE && n.id !== type.id && !space.isSubtypeOf(n.id, type.id))
     .sort((a, b) => (text(a.displayName) || a.browseName.name).localeCompare(text(b.displayName) || b.browseName.name)), [space, type]);
   const [holder, setHolder] = useState('');
+  // The transition whose ends and cause are open for change.
+  const [editing, setEditing] = useState<string>();
   const chosen = machine.states.find(s => s.key === holder) ?? machine.states[0];
   // The form empties only once the model took the state or transition; a refusal leaves it to correct.
   const addState = () => run(() => {
@@ -388,7 +390,27 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
             <li key={tr.key}>
               <button className="link" onClick={() => onSelect(tr.key)}>{tr.name}</button>
               <span className="ends">{ends(machine, tr)}{tr.causeName ? ` / ${tr.causeName}()` : ''}</span>
+              {editor.owns(tr.key) && (
+                <button title={t('Change ends and cause')} onClick={() => setEditing(k => (k === tr.key ? undefined : tr.key))}>✎</button>
+              )}
               <button title={t('Remove')} onClick={() => run(() => editor.delete(tr.key))}>×</button>
+              {/* Each change is a step of its own; ends must be states of this machine. */}
+              {editing === tr.key && (
+                <div className="row wrap">
+                  <select value={tr.from ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { from: e.target.value || undefined }))}>
+                    <option value="">{t('from …')}</option>
+                    {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                  </select>
+                  <select value={tr.to ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { to: e.target.value || undefined }))}>
+                    <option value="">{t('to …')}</option>
+                    {machine.states.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                  </select>
+                  <select value={tr.cause ?? ''} onChange={e => run(() => editor.setTransition(tr.key, { cause: e.target.value || undefined }))}>
+                    <option value="">{t('caused by …')}</option>
+                    {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
+                  </select>
+                </div>
+              )}
             </li>
           ))}
         </ul>

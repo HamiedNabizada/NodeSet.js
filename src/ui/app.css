@@ -190,7 +190,8 @@ fieldset.add .row.wrap select, fieldset.add .row.wrap input { min-width: 92px; f
 .machine { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
 .machine li { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; padding: 2px 0; border-bottom: 1px solid var(--hover); }
 .machine li .ends { flex: 1; min-width: 0; color: var(--muted); }
-.machine li button:last-child { padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }
+.machine li > .row { flex-basis: 100%; }
+.machine li > button:not(.link) { padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--field); color: var(--ink); cursor: pointer; }
 
 /* A part that failed while it was drawn (Guard). */
 .guard { margin: 10px; padding: 10px 12px; border: 1px solid var(--danger-line); border-radius: 6px; color: var(--danger); background: var(--bg); }

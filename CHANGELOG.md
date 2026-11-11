@@ -8,6 +8,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- The ends and the cause of a transition are changed in place (**✎** in the
+  list of transitions), each change one step of undo; before, the
+  transition had to be removed and added again.
 - **DisplayName** in the panel, apart from the name (`setDisplayName`):
   renaming carries it along only while it is the BrowseName; empty, it is
   the BrowseName again. Texts in further locales stay, also on renaming,

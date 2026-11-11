@@ -528,8 +528,10 @@ first, then the transitions between them."
   machine type.
 
 Click the name of a state or transition to show it in the panel; **×**
-removes it. The ends of an existing transition have no field of their own:
-remove the transition and add it again.
+removes it. **✎** beside a transition of your model opens its ends and its
+cause for change: choose another state or method, or the empty entry to
+remove one (the checks then report the missing end). Each change is one
+step of undo; an end must be a state of the machine.
 
 ![The section State machine of PumpStateMachineType: the states Idle 1, Running 2 and Maintenance 3, the row Machine of, the transitions IdleToRunning (Idle to Running, caused by Start()), RunningToIdle, RunningToMaintenance and MaintenanceToIdle, and the row for a new transition](manual/state-machine.png)
 
@@ -764,8 +766,6 @@ What the modeler does not edit, or edits only in part:
   StatusCode, matrices of three or more dimensions, structures with a field
   that allows subtypes, and structure values of other ValueRanks than
   Scalar and OneDimension are kept, not edited.
-- **Transitions**: the states and cause of an existing transition have no
-  field; remove the transition and add it again.
 - **Views** are neither created nor edited.
 - **The diagram** shows a type's own declarations, three levels deep and
   at most 200 shapes, and not the ones it inherits. It cannot be exported
