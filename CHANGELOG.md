@@ -40,6 +40,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- Add state and Add transition emptied the form even when the model refused
+  the state or transition (a name given twice, say); the typed name now stays
+  to be corrected.
 - The German interface showed some English: "Part of …; read only.",
   "(none)" for the ModellingRule, the question before dropping unapplied
   changes and the names of its sections, "The checks stopped:", "optional,

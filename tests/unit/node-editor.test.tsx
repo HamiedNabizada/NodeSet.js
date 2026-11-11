@@ -104,6 +104,45 @@ describe('The node editor', () => {
     expect(ws.space.out(pump).map(e => e.target)).toContain(`${DI}|i=1002`);
   });
 
+  // A refused state or transition took the typed name with it.
+  it('keeps the name of a state or transition the model refuses', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Machine/');
+    const machine = ws.editor!.addStateMachineType('PumpStateMachineType');
+    ws.editor!.addState(machine, 'Idle', 1);
+    const running = ws.editor!.addState(machine, 'Running', 2);
+    ws.editor!.addTransition(machine, 'Go', 1, running, running);
+    // As the app runs an edit: a refusal goes to the status line.
+    const refusals: string[] = [];
+    act(() => root.render(
+      <NodeEditor space={ws.space} editor={ws.editor!} nodeKey={machine}
+        run={action => { try { action(); } catch (e) { refusals.push((e as Error).message); } }}
+        onOpenType={() => undefined} onCreated={() => undefined} onInstance={() => undefined} />));
+    const field = (placeholder: string) => host.querySelector(`input[placeholder="${placeholder}"]`) as HTMLInputElement;
+    const type = (input: HTMLInputElement, value: string) => act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const click = (label: string) => act(() => { Array.from(host.querySelectorAll('button')).find(b => b.textContent === label)!.click(); });
+    const choose = (select: HTMLSelectElement, value: string) => act(() => {
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    type(field('New state'), 'Idle');
+    click('Add state');
+    expect(refusals).toHaveLength(1);
+    expect(field('New state').value).toBe('Idle');
+
+    type(field('New transition'), 'Go');
+    const ends = Array.from(field('New transition').parentElement!.querySelectorAll('select'));
+    choose(ends[0], running);
+    choose(ends[1], running);
+    click('Add transition');
+    expect(refusals).toHaveLength(2);
+    expect(field('New transition').value).toBe('Go');
+  });
+
   it('gives a state a machine of its own from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Machine/');

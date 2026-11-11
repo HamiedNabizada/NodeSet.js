@@ -333,6 +333,15 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
     .sort((a, b) => (text(a.displayName) || a.browseName.name).localeCompare(text(b.displayName) || b.browseName.name)), [space, type]);
   const [holder, setHolder] = useState('');
   const chosen = machine.states.find(s => s.key === holder) ?? machine.states[0];
+  // The form empties only once the model took the state or transition; a refusal leaves it to correct.
+  const addState = () => run(() => {
+    editor.addState(type.id, state.trim(), nextNumber(machine.states));
+    setState('');
+  });
+  const addTransition = () => run(() => {
+    editor.addTransition(type.id, transition.name.trim(), nextNumber(machine.transitions), transition.from, transition.to, transition.cause || undefined);
+    setTransition({ name: '', from: '', to: '', cause: '' });
+  });
 
   return (
     <fieldset className="add">
@@ -368,8 +377,8 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
       )}
       <div className="row">
         <input placeholder={t('New state')} value={state} onChange={e => setState(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && state.trim()) { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); } }} />
-        <button disabled={!state.trim()} onClick={() => { run(() => editor.addState(type.id, state.trim(), nextNumber(machine.states))); setState(''); }}>{t('Add state')}</button>
+          onKeyDown={e => { if (e.key === 'Enter' && state.trim()) addState(); }} />
+        <button disabled={!state.trim()} onClick={addState}>{t('Add state')}</button>
       </div>
 
       {machine.transitions.length > 0 && (
@@ -399,14 +408,7 @@ export function StateMachineSection({ space, editor, type, run, onSelect }: {
             <option value="">{t('caused by …')}</option>
             {methods.map(m => <option key={m.id} value={m.id}>{text(m.displayName) || m.browseName.name}()</option>)}
           </select>
-          <button
-            disabled={!transition.name.trim() || !transition.from || !transition.to}
-            onClick={() => {
-              run(() => editor.addTransition(type.id, transition.name.trim(), nextNumber(machine.transitions), transition.from, transition.to,
-                transition.cause || undefined));
-              setTransition({ name: '', from: '', to: '', cause: '' });
-            }}
-          >{t('Add transition')}</button>
+          <button disabled={!transition.name.trim() || !transition.from || !transition.to} onClick={addTransition}>{t('Add transition')}</button>
         </div>
       )}
       {chart && (
