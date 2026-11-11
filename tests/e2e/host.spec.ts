@@ -46,6 +46,56 @@ test('tells the host that an edit which made the modeler fail is unsaved', async
   await expect.poll(() => lastDirty(page)).toBe(true);
 });
 
+const lastPosted = async (page: Page, type: string) => (await posted(page)).filter(m => m.type === type).pop();
+
+// The page stays editable while the host imports; an edit made then is not in what the host took.
+test('keeps an edit made while the host imports unsaved, when the host names the change it took', async ({ page }) => {
+  await openedByHost(page);
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'FirstType');
+  await page.getByRole('button', { name: 'Apply to document' }).click();
+  const apply = await lastPosted(page, 'apply');
+  expect(typeof apply?.change).toBe('number');
+
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'SecondType');
+  await send(page, { type: 'applied', ok: true, text: 'Imported.', change: apply!.change });
+  await expect(page.locator('.status')).toContainText('Imported.');
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+  expect(await lastDirty(page)).toBe(true);
+
+  // Applied again, with nothing changed since: the model counts as saved.
+  await page.getByRole('button', { name: 'Apply to document' }).click();
+  const again = await lastPosted(page, 'apply');
+  expect(again?.change).not.toBe(apply!.change);
+  await send(page, { type: 'applied', ok: true, text: 'Imported again.', change: again!.change });
+  await expect(page.getByRole('button', { name: 'Save NodeSet', exact: true })).toBeVisible();
+  await expect.poll(() => lastDirty(page)).toBe(false);
+
+  // A save names its change as well.
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'ThirdType');
+  await page.getByRole('button', { name: /^Save NodeSet/ }).click();
+  const save = await lastPosted(page, 'save');
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'FourthType');
+  await send(page, { type: 'saved', ok: true, text: 'Saved.', change: save!.change });
+  await expect(page.locator('.status')).toContainText('Saved.');
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+});
+
+test('counts the model as saved on a reply without a change, as hosts did before', async ({ page }) => {
+  await openedByHost(page);
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'FirstType');
+  await page.getByRole('button', { name: 'Apply to document' }).click();
+  await page.locator('button[title="New ObjectType"]').click();
+  await answer(page, 'SecondType');
+  await send(page, { type: 'applied', ok: true, text: 'Imported.' });
+  await expect(page.getByRole('button', { name: 'Save NodeSet', exact: true })).toBeVisible();
+  await expect.poll(() => lastDirty(page)).toBe(false);
+});
+
 test('hears the host while the modeler shows a failure', async ({ page }) => {
   await openedByHost(page);
   await breakSorting(page);

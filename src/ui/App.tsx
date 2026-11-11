@@ -5,7 +5,7 @@ import { insideType } from '../nodeset/checks';
 import { check, Finding, RULES } from '../nodeset/checks';
 import { EditError } from '../nodeset/edit';
 import { NodeClass, text, uaKey, UaNode } from '../nodeset/model';
-import { applyTheme, HostBridge, HostToModeler } from '../host/bridge';
+import { applyTheme, HostBridge, HostToModeler, savesAll } from '../host/bridge';
 import { Workspace } from '../workspace';
 import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
@@ -34,6 +34,8 @@ const OBJECTS = uaKey(85);
 interface Kept {
   workspace?: Workspace;
   dirty: boolean;
+  /** Counts the changes; "apply" and "save" tell the host the last one, and its reply names the one it took. */
+  change: number;
 }
 
 /** What the modeler receives from outside while it lives; kept for it while it has failed. */
@@ -55,10 +57,10 @@ function fileName(workspace: Workspace): string {
 }
 
 /** Saves the model: through the host's save dialog when there is a host, else as a download. */
-function saveModel(workspace: Workspace, host: HostBridge | undefined): string {
+function saveModel(workspace: Workspace, host: HostBridge | undefined, change: number): string {
   const name = fileName(workspace);
   if (host) {
-    host.post({ type: 'save', xml: workspace.save(), name });
+    host.post({ type: 'save', xml: workspace.save(), name, change });
     return name;
   }
   const a = document.createElement('a');
@@ -74,7 +76,7 @@ function saveModel(workspace: Workspace, host: HostBridge | undefined): string {
  * message offers to save it and to start the modeler again with it.
  */
 export function App() {
-  const kept = useRef<Kept>({ dirty: false });
+  const kept = useRef<Kept>({ dirty: false, change: 0 });
   // Inside the AutomationML Editor plugin (WebView2) the host opens models and takes them back.
   const host = useMemo(() => HostBridge.detect(), []);
   const [dirty, setDirty] = useState(false);
@@ -95,7 +97,7 @@ export function App() {
       if (message.type === 'theme') applyTheme(message.dark);
       else if (inbox.current.host) inbox.current.host(message);
       else if (message.type === 'open' || message.type === 'new') inbox.current.pending = message;
-      else if (message.ok) {
+      else if (savesAll(message, kept.current.change)) {
         kept.current = { ...kept.current, dirty: false };
         setDirty(false);
       }
@@ -125,7 +127,7 @@ export function App() {
   const rescue = () => {
     const workspace = kept.current.workspace;
     if (!workspace?.editable) return null;
-    return <button onClick={() => saveModel(workspace, host)}>{t('Save NodeSet')}</button>;
+    return <button onClick={() => saveModel(workspace, host, kept.current.change)}>{t('Save NodeSet')}</button>;
   };
 
   return (
@@ -175,7 +177,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     setRevision(r => r + 1);
     setDirty(true);
     // At once, not after the next render: that render may be the one that fails.
-    kept.current = { ...kept.current, dirty: true };
+    kept.current = { ...kept.current, dirty: true, change: kept.current.change + 1 };
     onDirty(true);
   }, [kept, onDirty]);
 
@@ -187,7 +189,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       await action(ws);
       for (const xml of required) await ws.addRequired(xml);
       const missing = ws.missing;
-      kept.current = { workspace: ws, dirty: false };
+      kept.current = { ...kept.current, workspace: ws, dirty: false };
       setWorkspace(ws);
       setDirty(false);
       setShown(undefined);
@@ -282,12 +284,12 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     setSelected(key);
   }, []);
 
-  // The model counts as unchanged once the host reports it imported ("applied").
+  // The model counts as unchanged once the host reports it imported ("applied"), unless it was changed meanwhile.
   const apply = useCallback(() => {
     if (!host || !workspace?.editable || !mayLeaveDrafts()) return;
-    host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '' });
+    host.post({ type: 'apply', xml: workspace.save(), modelUri: workspace.editable.models[0]?.modelUri ?? '', change: kept.current.change });
     setStatus({ text: t('Applying to the document …') });
-  }, [host, workspace]);
+  }, [host, workspace, kept]);
 
   // Messages from the host, through App; one that came while the modeler had failed comes first.
   useEffect(() => {
@@ -296,8 +298,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       if (m.type === 'open') start(ws => ws.open(m.xml), m.name, m.required);
       if (m.type === 'new') start(ws => ws.create(m.modelUri), m.modelUri, m.required);
       if (m.type === 'applied' || m.type === 'saved') {
-        if (m.ok) setDirty(false);
-        setStatus({ text: m.text, warn: !m.ok });
+        const all = savesAll(m, kept.current.change);
+        if (all) setDirty(false);
+        const later = m.type === 'applied' ? t('{0} Changes made since then are not applied yet.', m.text) : t('{0} Changes made since then are not saved yet.', m.text);
+        setStatus({ text: m.ok && !all ? later : m.text, warn: !m.ok });
       }
     };
     const box = inbox.current;
@@ -307,10 +311,10 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       box.pending = undefined;
     }
     return () => { box.host = undefined; };
-  }, [host, start, inbox]);
+  }, [host, start, inbox, kept]);
 
   useEffect(() => {
-    kept.current = { workspace, dirty };
+    kept.current = { ...kept.current, workspace, dirty };
     onDirty(dirty);
   }, [kept, workspace, dirty, onDirty]);
 
@@ -343,11 +347,11 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   const save = useCallback(() => {
     if (!workspace?.editable || !mayLeaveDrafts()) return;
     // Inside a desktop host a save dialog of the host, which answers "saved".
-    const name = saveModel(workspace, host);
+    const name = saveModel(workspace, host, kept.current.change);
     if (host) return;
     setDirty(false);
     setStatus({ text: t('Saved {0}.', name) });
-  }, [workspace, host]);
+  }, [workspace, host, kept]);
 
   // Undo and redo from the keyboard, except while typing.
   useEffect(() => {

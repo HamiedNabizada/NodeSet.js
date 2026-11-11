@@ -6,7 +6,19 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Changed
+
+- Host protocol: "apply" and "save" carry `change`, the number of the last
+  change the NodeSet holds. A host that echoes it in "applied" or "saved"
+  (`{ type, ok, text, change }`) lets the modeler count the model as
+  unchanged only when nothing was changed since; a host that does not echo it
+  is taken at its word, as before.
+
 ### Fixed
+
+- Inside a host, an edit made while the host imported or saved the model
+  counted as saved once the host answered. With a host that echoes `change`
+  it stays unsaved, and the status line says so.
 
 - Loading the model that is open (the DI sample, then Load DI/, or its file
   through Load a NodeSet file…) loaded it a second time: every reference
