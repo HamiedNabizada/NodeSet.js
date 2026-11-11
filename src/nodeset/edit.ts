@@ -15,7 +15,7 @@
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { insideType } from './checks';
 import { readStateMachine } from './statemachine';
-import { builtInOf, matrixXml, structureOf, structureValue, ValueError, valueXml } from './values';
+import { builtInOf, elementsXml, matrixXml, shapeFor, structureOf, structureValue, valueElements, ValueError, valueXml } from './values';
 import { StructValue, structShape, structureObjects } from './structures';
 import { Argument, NodeClass, NodeSetFile, parseNodeIdKey, Reference, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 import { Message, MessageError, msg } from './message';
@@ -546,12 +546,63 @@ export class ModelEditor {
       const t = this.space().get(dataType);
       if (!t || t.nodeClass !== 'DataType') throw new EditError(msg`The data type must be a DataType.`);
       if (n.nodeClass !== 'Variable' && n.nodeClass !== 'VariableType') throw new EditError(msg`A ${n.nodeClass} has no data type.`);
+      const before = n.dataType;
       n.dataType = dataType;
+      this.fitValue(n, before, n.valueRank ?? -1);
     });
   }
 
   setValueRank(key: string, valueRank: number): void {
-    this.change(() => { this.node(key).valueRank = valueRank; });
+    this.change(() => {
+      const n = this.node(key);
+      const before = n.valueRank ?? -1;
+      n.valueRank = valueRank;
+      if (n.nodeClass === 'Variable' || n.nodeClass === 'VariableType') this.fitValue(n, n.dataType, before);
+    });
+  }
+
+  /**
+   * Fits the value to a new DataType or ValueRank, in the same step: a value
+   * the new DataType takes as it is (the old one derives from it) stays; one
+   * whose elements fit the new built-in type and shape is written anew; any
+   * other is removed.
+   */
+  private fitValue(n: UaNode, typeBefore: string | undefined, rankBefore: number): void {
+    const space = this.space();
+    const rank = n.valueRank ?? -1;
+    if (n.dataType === typeBefore && rank === rankBefore) return;
+    const takesOld = !!typeBefore && !!n.dataType && space.isSubtypeOf(typeBefore, n.dataType);
+
+    if (n.arguments) {
+      if (n.dataType !== ARGUMENT) n.arguments = undefined;
+      return;
+    }
+    if (n.extensionObjects) {
+      const { items, list } = n.extensionObjects;
+      const typed = items.every(i => {
+        const type = space.in(i.typeId, HAS_ENCODING, false)[0]?.source;
+        return !!type && !!n.dataType && space.isSubtypeOf(type, n.dataType);
+      });
+      const asList = rank === 0 || rank === 1 ? true : rank === -1 ? false : rank < -1 ? list : undefined;
+      n.extensionObjects = typed && asList !== undefined && (asList || items.length === 1) ? { list: asList, items } : undefined;
+      return;
+    }
+    if (!n.valueXml?.trim()) return;
+    const value = valueElements(n, builtInOf(space, typeBefore));
+    if (!value) {
+      // A value the panel cannot read stays only where it still fits for certain.
+      if (!(takesOld && (rank === rankBefore || rank === -2))) n.valueXml = undefined;
+      return;
+    }
+    if (takesOld && rank === rankBefore) return;
+    const builtIn = builtInOf(space, n.dataType) ?? (takesOld ? builtInOf(space, typeBefore) : undefined);
+    const shaped = shapeFor(value, rank);
+    try {
+      n.valueXml = builtIn && shaped ? elementsXml(builtIn, shaped) : undefined;
+    } catch (e) {
+      if (!(e instanceof ValueError)) throw e;
+      n.valueXml = undefined;
+    }
   }
 
   /** ReferenceType: a symmetric type has no InverseName. */

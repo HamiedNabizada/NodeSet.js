@@ -162,14 +162,21 @@ function ValueField({ space, editor, node, own, run }: { space: AddressSpace; ed
   }
   const text = node.extensionObjects ? null : valueText(node, builtIn);
   const hint = !node.dataType ? t('choose a DataType first') : t('values of this DataType are not edited here');
+  const hasValue = !!node.valueXml?.trim() || !!node.extensionObjects;
   return (
-    <Field label={t('Value')}>
-      {text === null
-        ? <span className="note">{t('A structured value; kept as it was read.')}</span>
-        : <TextInput value={text ?? ''} disabled={!own || !builtIn}
-            placeholder={!builtIn ? hint : rank >= 2 ? t('a; b | c; d (rows separated by |)') : array ? 'a; b; c' : builtIn}
-            onCommit={v => run(() => editor.setValue(node.id, v))} />}
-    </Field>
+    <>
+      <Field label={t('Value')}>
+        {text === null
+          ? <span className="note">{t('A structured value; kept as it was read.')}</span>
+          : <TextInput value={text ?? ''} disabled={!own || !builtIn}
+              placeholder={!builtIn ? hint : rank >= 2 ? t('a; b | c; d (rows separated by |)') : array ? 'a; b; c' : builtIn}
+              onCommit={v => run(() => editor.setValue(node.id, v))} />}
+      </Field>
+      {/* Outside the field's label, which would pass every click on it to the button. */}
+      {own && hasValue && (
+        <div className="row"><button onClick={() => run(() => editor.setValue(node.id, undefined))}>{t('Remove value')}</button></div>
+      )}
+    </>
   );
 }
 

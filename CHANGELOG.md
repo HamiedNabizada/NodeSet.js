@@ -6,6 +6,15 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- Rule M024: a value does not fit the DataType or ValueRank of its node (an
+  element of another built-in type, text that is not of the type, an array
+  where a single value belongs, or the other way round). The base model and
+  DI have no such value.
+- **Remove value** in the panel, also for a value the panel shows but does
+  not edit.
+
 ### Changed
 
 - Host protocol: "apply" and "save" carry `change`, the number of the last
@@ -16,6 +25,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- Changing the DataType or the ValueRank kept the old value: `3.5` as Double
+  stayed `<Double>3.5</Double>` on an Int32. The value now follows in the same
+  step: kept where the new DataType takes it, written anew where its elements
+  fit the new type and rank, removed otherwise.
 - What the panel held for one node carried over to the next: unapplied
   arguments shown and applied to another method after "Drop them?", the name
   of a child to add, Optional picks, the transition form. Each node now gets

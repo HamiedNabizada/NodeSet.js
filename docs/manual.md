@@ -389,6 +389,14 @@ OneDimension and TwoDimensions. With OneDimension or OneOrMoreDimensions the
 value is an array: its elements separated by semicolons, `1; 2; 3`. With the
 other ranks except TwoDimensions it is a single value.
 
+Changing the DataType or the ValueRank changes the value in the same step:
+a value the new DataType takes as it is stays (a Double for Number); one
+whose elements fit the new type and rank is written anew (`3` as Double
+becomes `3` as Int32, a single value becomes an array of one); any other is
+removed (`3.5` for Int32, an array of two for Scalar). Undo brings back both.
+**Remove value** below the field removes the value, also one the panel shows
+but does not edit.
+
 ### Matrices
 
 With the ValueRank TwoDimensions the value is a matrix, typed row by row:
@@ -598,6 +606,7 @@ why.
 | M021 | error or warning | A state or transition has no number, or two of them share one. |
 | M022 | error | An instance is missing a child its type declares as Mandatory. |
 | M023 | error | An instance fills none of a MandatoryPlaceholder its type declares. |
+| M024 | error | A value does not fit the DataType or ValueRank of its node. |
 
 ## Undo and redo
 

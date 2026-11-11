@@ -40,21 +40,108 @@ export function builtInOf(space: AddressSpace, dataType: string | undefined): st
 }
 
 /**
+ * A value of a built-in type, element by element: a scalar is one row of one
+ * element, an array one row, a matrix of two dimensions its rows.
+ */
+export interface ValueElements {
+  kind: 'scalar' | 'list' | 'matrix';
+  rows: string[][];
+}
+
+/**
+ * The value as elements of the built-in type. Undefined when there is no
+ * value; null when the value is not of that type or not of a kind the panel
+ * edits.
+ */
+export function valueElements(node: UaNode, builtIn: string | undefined): ValueElements | undefined | null {
+  const xml = node.valueXml?.trim();
+  if (!xml) return undefined;
+  if (!builtIn) return null;
+  const matrix = /^<(?:\w+:)?Matrix\b[^>]*>([\s\S]*)<\/(?:\w+:)?Matrix>$/.exec(xml);
+  if (matrix) {
+    const rows = matrixRows(matrix[1], builtIn);
+    return rows && { kind: 'matrix', rows };
+  }
+  const list = new RegExp(`^<(?:\\w+:)?ListOf${builtIn}\\b[^>]*>([\\s\\S]*)</(?:\\w+:)?ListOf${builtIn}>$`).exec(xml);
+  const items = list ? elements(list[1], builtIn) : elements(xml, builtIn);
+  if (items === null || (!list && items.length !== 1)) return null;
+  return { kind: list ? 'list' : 'scalar', rows: [items] };
+}
+
+/**
  * The value as the panel shows it: a scalar as its text, an array as its
  * elements joined by "; ", a matrix of two dimensions row by row, the rows
  * joined by " | ". Undefined when there is no value; null when the value is
  * not of a kind the panel edits.
  */
 export function valueText(node: UaNode, builtIn: string | undefined): string | undefined | null {
+  const value = valueElements(node, builtIn);
+  return value ? value.rows.map(r => r.join('; ')).join(' | ') : value;
+}
+
+/**
+ * The elements in the shape a ValueRank asks for, or undefined when they do
+ * not have it: Scalar takes one element, OneDimension one row, TwoDimensions
+ * a matrix (an array becomes its one row), Any whatever there is.
+ */
+export function shapeFor(value: ValueElements, rank: number): ValueElements | undefined {
+  const all = value.rows.flat();
+  const oneRow = value.kind !== 'matrix' || value.rows.length === 1;
+  switch (rank) {
+    case -1: return all.length === 1 ? { kind: 'scalar', rows: [all] } : undefined;
+    case -2: return value;
+    case -3: return value.kind === 'scalar' ? value : oneRow ? { kind: 'list', rows: [all] } : undefined;
+    case 0: return value.kind === 'scalar' ? { kind: 'list', rows: [all] } : value;
+    case 1: return oneRow ? { kind: 'list', rows: [all] } : undefined;
+    case 2: return value.kind === 'matrix' ? value : all.length > 0 ? { kind: 'matrix', rows: [all] } : undefined;
+    default: return undefined;
+  }
+}
+
+/** The XML of a value from its elements; throws ValueError for an element that is not of the type. */
+export function elementsXml(builtIn: string, value: ValueElements): string {
+  if (value.kind === 'matrix') return matrixOf(builtIn, value.rows);
+  if (value.kind === 'list') return `<ListOf${builtIn} xmlns="${TYPES_NS}">${value.rows[0].map(p => element(builtIn, p)).join('')}</ListOf${builtIn}>`;
+  return element(builtIn, value.rows[0][0]).replace(`<${builtIn}>`, `<${builtIn} xmlns="${TYPES_NS}">`);
+}
+
+/** The names of the built-in types the panel edits, as XML elements. */
+const BUILT_IN_NAMES = new Set(Object.values(BUILT_IN));
+
+/**
+ * Why the value read from a file does not fit the DataType and ValueRank of
+ * its node, or undefined when it fits or nothing can be told: values of
+ * DataTypes that are no built-in type the panel knows (abstract ones, NodeId,
+ * structures …) are checked for their shape only, ExtensionObjects and
+ * arguments not at all.
+ */
+export function valueMisfit(space: AddressSpace, node: UaNode): Message | undefined {
   const xml = node.valueXml?.trim();
-  if (!xml) return undefined;
-  if (!builtIn) return null;
-  const matrix = /^<(?:\w+:)?Matrix\b[^>]*>([\s\S]*)<\/(?:\w+:)?Matrix>$/.exec(xml);
-  if (matrix) return matrixText(matrix[1], builtIn);
-  const list = new RegExp(`^<(?:\\w+:)?ListOf${builtIn}\\b[^>]*>([\\s\\S]*)</(?:\\w+:)?ListOf${builtIn}>$`).exec(xml);
-  const items = list ? elements(list[1], builtIn) : elements(xml, builtIn);
-  if (items === null || (!list && items.length !== 1)) return null;
-  return items.join('; ');
+  if (!xml || node.arguments || node.extensionObjects) return undefined;
+  const top = /^<(?:\w+:)?(\w+)\b/.exec(xml)?.[1];
+  if (!top || top === 'ExtensionObject' || top === 'ListOfExtensionObject') return undefined;
+  const kind = top === 'Matrix' ? 'matrix' : top.startsWith('ListOf') ? 'list' : 'scalar';
+  const rank = node.valueRank ?? -1;
+  if (kind === 'scalar' && rank !== -1 && rank !== -2 && rank !== -3) return msg`its value is a single element, but its ValueRank is ${rank}.`;
+  if (kind === 'list' && rank !== 0 && rank !== 1 && rank !== -2 && rank !== -3) return msg`its value is an array, but its ValueRank is ${rank}.`;
+  if (kind === 'matrix' && rank !== 0 && rank !== -2 && rank < 2) return msg`its value is a matrix, but its ValueRank is ${rank}.`;
+
+  const builtIn = builtInOf(space, node.dataType);
+  if (!builtIn) return undefined;
+  const name = kind === 'list' ? top.slice('ListOf'.length) : kind === 'scalar' ? top : builtIn;
+  if (name !== builtIn) return BUILT_IN_NAMES.has(name) ? msg`its value is a ${name}, not a ${builtIn} as its DataType asks.` : undefined;
+  for (const text of valueElements(node, builtIn)?.rows.flat() ?? []) {
+    // What XML Schema allows besides what the panel writes.
+    if ((builtIn === 'Float' || builtIn === 'Double') && /^[+-]?(INF|NaN)$/.test(text)) continue;
+    if (builtIn === 'Boolean' && /^[01]$/.test(text)) continue;
+    try {
+      element(builtIn, builtIn === 'ByteString' ? text.replace(/\s+/g, '') : text);
+    } catch (e) {
+      if (e instanceof ValueError) return msg`its value does not fit its DataType: ${e}`;
+      throw e;
+    }
+  }
+  return undefined;
 }
 
 function elements(xml: string, builtIn: string): string[] | null {
@@ -70,16 +157,16 @@ function elements(xml: string, builtIn: string): string[] | null {
   return rest.trim() === '' ? result : null;
 }
 
-/** A Matrix of two dimensions as rows: "1; 2 | 3; 4"; null for other ranks and for elements that do not add up. */
-function matrixText(inner: string, builtIn: string): string | null {
+/** A Matrix of two dimensions as rows; null for other ranks and for elements that do not add up. */
+function matrixRows(inner: string, builtIn: string): string[][] | null {
   const dimensions = /<(?:\w+:)?Dimensions>([\s\S]*?)<\/(?:\w+:)?Dimensions>/.exec(inner);
   const sizes = dimensions ? elements(dimensions[1], 'Int32')?.map(Number) : null;
   const value = /<(?:\w+:)?Value>([\s\S]*)<\/(?:\w+:)?Value>/.exec(inner);
   const items = value ? elements(value[1], builtIn) : [];
   if (!sizes || sizes.length !== 2 || items === null || items.length !== sizes[0] * sizes[1] || sizes[1] === 0) return null;
-  const rows: string[] = [];
-  for (let i = 0; i < items.length; i += sizes[1]) rows.push(items.slice(i, i + sizes[1]).join('; '));
-  return rows.join(' | ');
+  const rows: string[][] = [];
+  for (let i = 0; i < items.length; i += sizes[1]) rows.push(items.slice(i, i + sizes[1]));
+  return rows;
 }
 
 /**
@@ -88,7 +175,10 @@ function matrixText(inner: string, builtIn: string): string | null {
  * the last dimension running fastest (OPC 10000-6).
  */
 export function matrixXml(builtIn: string, text: string): string {
-  const rows = text.split('|').map(r => r.split(';').map(c => c.trim()).filter(c => c !== '')).filter(r => r.length > 0);
+  return matrixOf(builtIn, text.split('|').map(r => r.split(';').map(c => c.trim()).filter(c => c !== '')).filter(r => r.length > 0));
+}
+
+function matrixOf(builtIn: string, rows: string[][]): string {
   if (rows.length === 0) throw new ValueError(msg`A matrix needs at least one row.`);
   const width = rows[0].length;
   if (rows.some(r => r.length !== width)) throw new ValueError(msg`Every row of the matrix needs ${width} element(s), as the first has.`);
@@ -99,10 +189,7 @@ export function matrixXml(builtIn: string, text: string): string {
 /** The XML of a value typed in the panel; an array when the ValueRank asks for one. */
 export function valueXml(builtIn: string, text: string, array: boolean): string {
   const parts = array ? text.split(';').map(s => s.trim()).filter(s => s !== '') : [text.trim()];
-  const encoded = parts.map(p => element(builtIn, p));
-  return array
-    ? `<ListOf${builtIn} xmlns="${TYPES_NS}">${encoded.join('')}</ListOf${builtIn}>`
-    : encoded[0].replace(`<${builtIn}>`, `<${builtIn} xmlns="${TYPES_NS}">`);
+  return elementsXml(builtIn, { kind: array ? 'list' : 'scalar', rows: [parts] });
 }
 
 /** A structure the panel can edit: every field a built-in type, no optional fields. */

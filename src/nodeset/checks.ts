@@ -4,6 +4,7 @@
 import { Argument, Message, msg } from './message';
 import { AddressSpace, REF, RULE, SM } from './address-space';
 import { isStateMachineType, readStateMachine } from './statemachine';
+import { valueMisfit } from './values';
 import { NodeSetFile, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from './model';
 
 export type Severity = 'error' | 'warning';
@@ -43,6 +44,7 @@ export const RULES: Record<string, string> = {
   M021: 'A state or transition has no number, or two of them share one.',
   M022: 'An instance is missing a child its type declares as Mandatory.',
   M023: 'An instance fills none of a MandatoryPlaceholder its type declares.',
+  M024: 'A value does not fit the DataType or ValueRank of its node.',
 };
 
 const TYPE_CLASSES = new Set(['ObjectType', 'VariableType', 'DataType', 'ReferenceType']);
@@ -135,6 +137,11 @@ export function check(space: AddressSpace, file: NodeSetFile): Finding[] {
       add('M013', 'error', n, msg`it has ArrayDimensions but ValueRank ${rank}.`);
     } else if (rank >= 1 && dimensions.length > 0 && dimensions.length !== rank) {
       add('M013', 'error', n, msg`ValueRank ${rank} asks for ${rank} ArrayDimensions, not ${dimensions.length}.`);
+    }
+
+    if (n.nodeClass === 'Variable' || n.nodeClass === 'VariableType') {
+      const misfit = valueMisfit(space, n);
+      if (misfit) add('M024', 'error', n, misfit);
     }
 
     for (const a of n.arguments ?? []) {

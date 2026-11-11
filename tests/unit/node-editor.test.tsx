@@ -52,6 +52,29 @@ describe('The node editor', () => {
     expect(places).not.toContain('Server (UA)');
   });
 
+  it('removes a value with a button, also one the panel does not edit', async () => {
+    const ws = new Workspace();
+    await ws.create('http://example.org/Types/');
+    const pump = ws.editor!.addType('ObjectType', 'PumpType');
+    const speed = ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
+    ws.editor!.setDataType(speed, uaKey(11));
+    const removeButton = () => Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Remove value');
+
+    show(ws, speed);
+    expect(removeButton()).toBeUndefined();
+    ws.editor!.setValue(speed, '3.5');
+    show(ws, speed);
+    act(() => removeButton()!.click());
+    expect(ws.space.get(speed)!.valueXml).toBeUndefined();
+
+    ws.editor!.setDataType(speed, uaKey(17)); // NodeId: shown, not edited
+    ws.editable!.nodes.find(n => n.id === speed)!.valueXml = '<NodeId><Identifier>i=85</Identifier></NodeId>';
+    ws.editor!.rename(speed, 'Speed');
+    show(ws, speed);
+    act(() => removeButton()!.click());
+    expect(ws.space.get(speed)!.valueXml).toBeUndefined();
+  });
+
   it('gives a state a machine of its own from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Machine/');
