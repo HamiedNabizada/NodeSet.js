@@ -11,6 +11,7 @@ import { Backup, browserStore, Draft } from './backup';
 import { mayLeaveDrafts } from './drafts';
 import { Checked, runChecks } from './findings';
 import { Guard } from './Guard';
+import { useIdle } from './idle';
 import { topInstances } from './instances';
 import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
@@ -171,14 +172,23 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
   // The canvas outlives renders; it reaches the current edit function through a ref.
   const runRef = useRef<(action: () => unknown) => void>(() => undefined);
   const lastReferenceType = useRef('Organizes');
+  // Where shapes stand changes no node: the diagram is drawn anew, the checks and the lists stay.
+  const [layoutRevision, setLayoutRevision] = useState(0);
   const bump = useCallback(() => setRevision(r => r + 1), []);
-  const changed = useCallback(() => {
-    setRevision(r => r + 1);
+  const unsaved = useCallback(() => {
     setDirty(true);
     // At once, not after the next render: that render may be the one that fails.
     kept.current = { ...kept.current, dirty: true, change: kept.current.change + 1 };
     onDirty(true);
   }, [kept, onDirty]);
+  const changed = useCallback(() => {
+    setRevision(r => r + 1);
+    unsaved();
+  }, [unsaved]);
+  const layoutChanged = useCallback(() => {
+    setLayoutRevision(r => r + 1);
+    unsaved();
+  }, [unsaved]);
 
   /** Opens or starts a model; false when that failed, which the status line then says. */
   const start = useCallback(async (action: (ws: Workspace) => Promise<unknown>, name: string, required: string[] = []) => {
@@ -335,7 +345,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
     } else {
       backup.clear();
     }
-  }, [backup, workspace, dirty, revision]);
+  }, [backup, workspace, dirty, revision, layoutRevision]);
 
   useEffect(() => {
     if (!backup || kept.current.workspace) return;
@@ -402,13 +412,14 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       const diagram = modeler.current?.root;
       if (!diagram) return;
       for (const m of moved) workspace.place(diagram, m.nodeKey, m.x, m.y);
-      changed();
+      layoutChanged();
     });
     modelerRef.current = modeler;
     return () => { modeler.destroy(); modelerRef.current = undefined; };
-  }, [workspace, changed, select]);
+  }, [workspace, layoutChanged, select]);
 
-  // Redraw after every change; fit only when another type is shown.
+  // Redraw after every change, of the model or of where shapes stand (diagram-js
+  // would leave the lines of a moved shape straight); fit only when another type is shown.
   useEffect(() => {
     const modeler = modelerRef.current;
     if (!modeler || !workspace) return;
@@ -424,13 +435,16 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
       if (d.truncated) setStatus({ text: t('Deeper declarations are left out; double-click a node to open its type.') });
     }
     modeler.select(selectedRef.current);
-  }, [shown, workspace, revision]);
+  }, [shown, workspace, revision, layoutRevision]);
 
   useEffect(() => { modelerRef.current?.select(selected); }, [selected]);
 
-  const checked = useMemo<Checked>(
-    () => (workspace?.editable ? runChecks(() => check(workspace.space, workspace.editable!)) : { findings: [] }),
-    [workspace, revision]);
+  // The checks run once the page is idle after a change of the model, not in
+  // the render that shows the change; they take seconds on a large model.
+  const checksFor = useMemo(() => ({ workspace, revision }), [workspace, revision]);
+  const checked = useIdle<Checked>(
+    () => (checksFor.workspace?.editable ? runChecks(() => check(checksFor.workspace!.space, checksFor.workspace!.editable!)) : { findings: [] }),
+    checksFor, { findings: [] });
   const { findings } = checked;
 
   const types = useMemo(() => {
@@ -510,7 +524,7 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
         <span className="sep" />
         <button onClick={undo} disabled={!editor?.canUndo} title="Ctrl+Z">{t('Undo')}</button>
         <button onClick={redo} disabled={!editor?.canRedo} title="Ctrl+Y">{t('Redo')}</button>
-        {shown && <button onClick={() => { workspace?.resetLayout(shown); changed(); }}>{t('Reset layout')}</button>}
+        {shown && <button onClick={() => { workspace?.resetLayout(shown); layoutChanged(); }}>{t('Reset layout')}</button>}
         <button disabled={!workspace?.editable} onClick={() => select(undefined)} title={t('Version, date and the models in use')}>{t('Model')}</button>
         <span className="sep" />
         <button className={errors > 0 || checked.error ? 'warn' : ''} disabled={!workspace} onClick={() => setShowFindings(s => !s)}>

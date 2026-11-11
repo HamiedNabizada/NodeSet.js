@@ -573,7 +573,9 @@ what it lacks: in the example, `FlowRate` was added to `PumpType` after
 
 ## Checks and findings
 
-The modeler checks the model against OPC 10000-3 after every change. The
+The modeler checks the model against OPC 10000-3 after every change, once
+the page is idle, so a large model answers at once and its findings follow;
+moving shapes and **Reset layout** change no node and run no checks. The
 **Checks** button in the toolbar counts the findings, "Checks: 1 error(s),
 0 warning(s)", and is outlined while there are errors. Click it to show or
 hide the list of findings above the status line (the picture in [The

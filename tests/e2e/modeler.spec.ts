@@ -85,6 +85,29 @@ test('does not load the open model a second time', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+// Moving a shape changes no node: no checks, but an unsaved change all the same.
+test('keeps where a shape was moved to, as an unsaved change, and lays the diagram out anew', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openNodeSet(page, fixture);
+  await typeList(page).first().click();
+  const shape = page.locator('.djs-shape').first();
+  const before = await shape.boundingBox();
+  await page.mouse.move(before!.x + 40, before!.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(before!.x + 140, before!.y + 120, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+  await expect.poll(async () => (await page.locator('.djs-shape').first().boundingBox())!.x).toBeGreaterThan(before!.x + 50);
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Save NodeSet/ }).click()]);
+  expect(await readFile(await download.path(), 'utf8')).toContain('<UANodeSet');
+  await expect(page.getByRole('button', { name: 'Save NodeSet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reset layout' }).click();
+  await expect(page.getByRole('button', { name: 'Save NodeSet *' })).toBeVisible();
+  await expect.poll(async () => Math.round((await page.locator('.djs-shape').first().boundingBox())!.x)).toBe(Math.round(before!.x));
+  expect(errors).toEqual([]);
+});
+
 test('counts an edit that made the modeler fail as unsaved', async ({ page }) => {
   await openNodeSet(page, fixture);
   await breakSorting(page);

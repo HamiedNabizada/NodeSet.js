@@ -19,6 +19,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Changed
 
+- Moving shapes and Reset layout no longer run the checks nor rebuild the
+  lists: they mark the model unsaved and draw the diagram anew. The checks
+  run once the page is idle after a change, not in the render that shows it,
+  so a large model answers at once and its findings follow.
 - The target of a reference in the panel is found by name in every loaded
   model: two letters or more offer up to 50 matching nodes with their path
   and model, the model's own first. Before, the list held every node of the
