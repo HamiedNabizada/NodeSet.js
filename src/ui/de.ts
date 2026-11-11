@@ -107,6 +107,7 @@ export const de: Record<string, string> = {
   "Fields (exactly one is set)": "Felder (genau eines ist gesetzt)",
   "Fields belong to structures, unions, enumerations and OptionSets (subtypes of an unsigned integer or of OptionSet).": "Felder gibt es bei Strukturen, Unions, Enumerationen und OptionSets (Subtypen einer vorzeichenlosen Ganzzahl oder von OptionSet).",
   "Filter types": "Typen filtern",
+  "Inherited": "Geerbt",
   "Input arguments": "Eingangsargumente",
   "Instances": "Instanzen",
   "Kind '{0}' is neither Variable nor Property.": "Kind '{0}' ist weder Variable noch Property.",

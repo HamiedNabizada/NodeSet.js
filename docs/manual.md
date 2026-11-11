@@ -236,6 +236,12 @@ it is the Name again), **NodeId** (assigned by the modeler), **Description**, **
 **Abstract**. Type a supertype's name to change it; the modeler refuses one
 that is a subtype of the type itself. An abstract type has no instances.
 
+The panel of an ObjectType or VariableType lists under **Inherited** what
+it gets from its supertypes and does not declare itself, by the type it
+comes from, each with its NodeClass and cardinality. The list is read only;
+click a name to show that declaration. A declaration of the type that
+overrides one of a supertype hides it there.
+
 **Add subtype** in the panel of a type adds a subtype of it to your model,
 also of a type of a loaded model (DeviceType of DI, FolderType of the base
 model): type the name and click **Add**; the new type is shown.
@@ -768,8 +774,8 @@ What the modeler does not edit, or edits only in part:
   Scalar and OneDimension are kept, not edited.
 - **Views** are neither created nor edited.
 - **The diagram** shows a type's own declarations, three levels deep and
-  at most 200 shapes, and not the ones it inherits. It cannot be exported
-  as a picture.
+  at most 200 shapes, and not the ones it inherits (the panel lists those
+  under **Inherited**). It cannot be exported as a picture.
 - **The list of instances** shows the instances the Objects folder
   organizes or a node of a loaded model holds. An instance placed below
   another instance shows in that instance's diagram, not in the list.

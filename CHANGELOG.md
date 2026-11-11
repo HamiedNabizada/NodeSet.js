@@ -8,6 +8,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- **Inherited** in the panel of an ObjectType or VariableType: what it gets
+  from its supertypes and does not declare itself, by the type it comes
+  from, read only; a click shows the declaration.
 - The ends and the cause of a transition are changed in place (**✎** in the
   list of transitions), each change one step of undo; before, the
   transition had to be removed and added again.

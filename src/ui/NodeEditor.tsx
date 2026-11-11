@@ -9,7 +9,7 @@ import { NodeClass, parseNodeIdKey, text, UaNode } from '../nodeset/model';
 import { builtInOf, valueText } from '../nodeset/values';
 import { structShape, structureValues } from '../nodeset/structures';
 import { addSignals, parseSignals } from '../nodeset/csv';
-import { ArgumentsSection, FieldsSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
+import { ArgumentsSection, FieldsSection, InheritedSection, InstantiateSection, ReferencesSection, StateMachineSection, StructureValueSection } from './Sections';
 import { isStateMachineType } from '../nodeset/statemachine';
 import { t } from './i18n';
 
@@ -141,6 +141,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
         <InstantiateSection space={space} editor={editor} type={node} run={run} onCreated={onInstance} />
       )}
+      {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && <InheritedSection space={space} type={node} onSelect={onCreated} />}
       {isType && <AddSubtype editor={editor} type={node} run={run} onCreated={onOpenType} />}
       {own && (
         <div className="actions">

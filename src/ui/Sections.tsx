@@ -12,6 +12,7 @@ import { Argument, parseNodeIdKey, text, UA_NAMESPACE, uaKey, UaNode } from '../
 import { insideType } from '../nodeset/checks';
 import { emptyField, emptyStructure, FieldShape, FieldValue, StructShape, structShape, StructValue } from '../nodeset/structures';
 import { TypePicker } from './NodeEditor';
+import { cardinality } from '../modeler/diagram-model';
 import { t } from './i18n';
 
 type Run = (action: () => unknown) => void;
@@ -526,6 +527,49 @@ function NodePicker({ space, exclude, onPick, placeholder }: {
 
 function labelOf(n: UaNode): string {
   return text(n.displayName) || n.browseName.name;
+}
+
+/**
+ * What a type gets from its supertypes and does not declare itself, by the
+ * type it comes from, the nearest first: shown, not edited. A click shows the
+ * declaration in the panel. A declaration of the type that overrides one of a
+ * supertype (the same BrowseName and namespace) hides it.
+ */
+export function InheritedSection({ space, type, onSelect }: { space: AddressSpace; type: UaNode; onSelect: (key: string) => void }) {
+  const groups = useMemo(() => {
+    const seen = new Set(space.children(type).map(c => `${c.node.browseName.namespaceUri}|${c.node.browseName.name}`));
+    const result: { from: UaNode; items: UaNode[] }[] = [];
+    for (const t of space.typeChain(type).slice(1)) {
+      const items: UaNode[] = [];
+      for (const { node } of space.children(t)) {
+        const name = `${node.browseName.namespaceUri}|${node.browseName.name}`;
+        if (seen.has(name)) continue;
+        seen.add(name);
+        items.push(node);
+      }
+      if (items.length > 0) result.push({ from: t, items });
+    }
+    return result;
+  }, [space, type]);
+  if (groups.length === 0) return null;
+  return (
+    <fieldset className="add">
+      <legend>{t('Inherited')}</legend>
+      {groups.map(g => (
+        <details key={g.from.id} open={groups.length === 1}>
+          <summary>{labelOf(g.from)} ({g.items.length})</summary>
+          <ul className="inherited">
+            {g.items.map(n => (
+              <li key={n.id}>
+                <button className="link" onClick={() => onSelect(n.id)}>{labelOf(n)}</button>
+                <span className="note"> {n.nodeClass} {cardinality(space.modellingRule(n)) ?? ''}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </fieldset>
+  );
 }
 
 /** Creates an instance of a type: a name and the Optional declarations to include. */

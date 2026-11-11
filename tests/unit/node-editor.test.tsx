@@ -126,6 +126,33 @@ describe('The node editor', () => {
     expect(opened).toEqual([created.id]);
   });
 
+  it('lists what a subtype inherits and does not declare itself, by the type it comes from', async () => {
+    const DI = 'http://opcfoundation.org/UA/DI/';
+    const ws = new Workspace();
+    await ws.create('http://example.org/Plant/');
+    await ws.addBundled(DI);
+    const pump = ws.editor!.addType('ObjectType', 'PumpDeviceType', `${DI}|i=1002`);
+    ws.editor!.addDeclaration(pump, 'Variable', 'SerialNumber'); // overrides DeviceType's in another namespace: both stay
+    const speed = ws.editor!.addDeclaration(pump, 'Variable', 'Speed');
+    const selected: string[] = [];
+    act(() => root.render(
+      <NodeEditor space={ws.space} editor={ws.editor!} nodeKey={pump} run={action => action()}
+        onOpenType={() => undefined} onCreated={key => selected.push(key)} onInstance={() => undefined} />));
+
+    const section = Array.from(host.querySelectorAll('fieldset')).find(f => f.querySelector('legend')?.textContent === 'Inherited')!;
+    const groups = Array.from(section.querySelectorAll('details'), d => [d.querySelector('summary')!.textContent, Array.from(d.querySelectorAll('li button'), b => b.textContent)]);
+    const from = groups.map(g => (g[0] as string).split(' ')[0]);
+    expect(from[0]).toBe('DeviceType');
+    expect(from.every(name => ['DeviceType', 'ComponentType', 'TopologyElementType'].includes(name))).toBe(true);
+    const fromDevice = groups.find(g => (g[0] as string).startsWith('DeviceType'))![1] as string[];
+    expect(fromDevice).toContain('Manufacturer');
+    expect(fromDevice).not.toContain('Speed');
+    act(() => { (Array.from(section.querySelectorAll('li button')).find(b => b.textContent === 'Manufacturer') as HTMLButtonElement).click(); });
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).not.toBe(speed);
+    expect(ws.space.get(selected[0])!.browseName.name).toBe('Manufacturer');
+  });
+
   it('lets a variable be written, historized and sampled from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Types/');
