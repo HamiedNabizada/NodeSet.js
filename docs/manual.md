@@ -741,8 +741,9 @@ What the modeler does not edit, or edits only in part:
   from the name, texts in further locales, AccessLevel, ArrayDimensions and
   SymbolicName, are kept as they were read.
 - **DataType fields**: their descriptions, the descriptions of enumeration
-  values, and what else a field carries (MaxStringLength, ArrayDimensions)
-  are kept but have no field in the panel.
+  values, and what else a field carries (MaxStringLength, its DisplayName,
+  its ArrayDimensions while it stays an array of the same ValueRank) are
+  kept but have no field in the panel.
 - **Values**: values of built-in types such as NodeId, QualifiedName or
   StatusCode, matrices of three or more dimensions, structures with a field
   that allows subtypes, and structure values of other ValueRanks than

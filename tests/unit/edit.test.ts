@@ -330,4 +330,30 @@ describe('Fields that allow subtypes', () => {
 
     expect(field(ws, result, 'Id').otherAttributes).toEqual({ MaxStringLength: '20' });
   });
+
+  // The reader keeps ArrayDimensions and DisplayName apart from the other attributes; Apply dropped both.
+  it('keeps the ArrayDimensions and the DisplayName of a field', async () => {
+    const { ws, e, result } = await structure();
+    const content = ws.editable!.nodes.find(n => n.id === result)!.definition!.fields.find(f => f.name === 'Content')!;
+    Object.assign(content, { valueRank: 1, arrayDimensions: '3', displayName: [{ text: 'Inhalt', locale: 'de' }] });
+    e.acceptOutsideChanges();
+
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1, description: 'The key' },
+      { name: 'Content', dataType: uaKey(22), valueRank: 1 },
+    ]);
+    expect(field(ws, result, 'Content').arrayDimensions).toBe('3');
+    expect(field(ws, result, 'Content').displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
+    const saved = readNodeSet(ws.save()).nodes.find(n => n.id === result)!.definition!.fields.find(f => f.name === 'Content')!;
+    expect(saved.arrayDimensions).toBe('3');
+    expect(saved.displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
+
+    // A field that is no array any more has no dimensions.
+    e.setFields(result, [
+      { name: 'Id', dataType: uaKey(12), valueRank: -1 },
+      { name: 'Content', dataType: uaKey(22), valueRank: -1 },
+    ]);
+    expect(field(ws, result, 'Content').arrayDimensions).toBeUndefined();
+    expect(field(ws, result, 'Content').displayName).toEqual([{ text: 'Inhalt', locale: 'de' }]);
+  });
 });

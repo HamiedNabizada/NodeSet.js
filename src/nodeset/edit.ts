@@ -537,6 +537,7 @@ export class ModelEditor {
     if (after && numbered(before) === numbered(after)) {
       this.writeFields(d, d.definition.fields.map(f => ({
         name: f.name, dataType: f.dataType, valueRank: f.valueRank, isOptional: after === 'union' ? undefined : f.isOptional, description: text(f.description), value: f.value,
+        allowSubTypes: f.otherAttributes.AllowSubTypes === 'true' || undefined,
       })), supertype);
     } else {
       d.definition = undefined;
@@ -733,11 +734,21 @@ export class ModelEditor {
       }
     }
     const { IsUnion: _u, IsOptionSet: _o, ...otherAttributes } = d.definition?.otherAttributes ?? {};
-    // What a field carries that the panel does not edit (MaxStringLength, ArrayDimensions …) stays with its name.
-    const kept = new Map((d.definition?.fields ?? []).map(f => [f.name, f.otherAttributes] as const));
+    // What a field carries that the panel does not edit (MaxStringLength, its
+    // DisplayName, its ArrayDimensions while it stays an array of the same
+    // rank …) stays with its name.
+    const kept = new Map((d.definition?.fields ?? []).map(f => [f.name, f] as const));
     const attributesOf = (f: FieldInput) => {
-      const { AllowSubTypes: _s, ...rest } = kept.get(f.name.trim()) ?? {};
+      const { AllowSubTypes: _s, ...rest } = kept.get(f.name.trim())?.otherAttributes ?? {};
       return { ...rest, ...(!numbered && f.allowSubTypes ? { AllowSubTypes: 'true' } : {}) };
+    };
+    const carried = (f: FieldInput) => {
+      const old = kept.get(f.name.trim());
+      const rank = f.valueRank ?? -1;
+      return {
+        displayName: old ? structuredClone(old.displayName) : [],
+        ...(!numbered && old?.arrayDimensions && rank >= 1 && (old.valueRank ?? -1) === rank ? { arrayDimensions: old.arrayDimensions } : {}),
+      };
     };
     d.definition = {
       name: d.browseName,
@@ -750,7 +761,7 @@ export class ModelEditor {
         name: f.name.trim(),
         ...(numbered ? { value: f.value ?? i } : { dataType: f.dataType, valueRank: f.valueRank ?? -1, ...(f.isOptional ? { isOptional: true } : {}) }),
         description: f.description?.trim() ? [{ text: f.description.trim() }] : [],
-        displayName: [],
+        ...carried(f),
         otherAttributes: attributesOf(f),
       })),
     };

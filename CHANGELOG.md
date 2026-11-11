@@ -40,6 +40,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Fixed
 
+- Apply in the fields of a DataType dropped a field's ArrayDimensions and
+  DisplayName, which the reader keeps apart from its other attributes; a new
+  supertype dropped AllowSubTypes. They now stay with the field's name, the
+  ArrayDimensions while the field stays an array of the same ValueRank.
 - The encodings of a DataType ("Default Binary", "Default XML", "Default
   JSON") were offered as places for a new instance. They are not any more.
 - An instance placed below a node of a loaded model, such as DI's DeviceSet,
