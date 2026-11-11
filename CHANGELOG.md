@@ -8,6 +8,9 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- **Add subtype** in the panel of any type, also of a loaded model's (DI's
+  DeviceType, say), adds a subtype of it to the model. The dialog of a new
+  type asks for its supertype with its name.
 - AccessLevel and UserAccessLevel (read, write), Historizing and
   MinimumSamplingInterval of a variable in the panel (`setAccess` in the
   editor). The defaults of the schema are not written; an instance takes

@@ -72,6 +72,28 @@ test('lists an instance placed below a node of a loaded model, such as DeviceSet
   expect(errors).toEqual([]);
 });
 
+test('creates a type below the supertype named with it, and a subtype of a type of the base model', async ({ page }) => {
+  const errors = watchErrors(page);
+  await newModel(page);
+  await page.locator('button[title="New ObjectType"]').click();
+  const dialog = page.locator('.ask-backdrop');
+  await expect(dialog.locator('input').nth(1)).toHaveValue('BaseObjectType');
+  await dialog.locator('input').nth(0).fill('PumpType');
+  await dialog.locator('input').nth(1).fill('FolderType');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(page.locator('.editor h3')).toContainText('PumpType');
+  await expect(page.locator('.field', { hasText: 'Supertype' }).locator('input')).toHaveValue('FolderType');
+
+  // FolderType is the base model's: its panel adds a subtype of it to the model.
+  await page.locator('.djs-shape', { hasText: 'FolderType' }).click();
+  const add = page.locator('fieldset', { has: page.locator('legend', { hasText: 'Add subtype' }) });
+  await add.getByPlaceholder('Name').fill('CabinetType');
+  await add.getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.editor h3')).toContainText('CabinetType');
+  await expect(page.locator('.main > .side:not(.right) .item', { hasText: 'CabinetType' })).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
 test('starts the panel of another node empty: the name of a child to add does not stay', async ({ page }) => {
   page.on('dialog', dialog => dialog.accept());
   await newModel(page);

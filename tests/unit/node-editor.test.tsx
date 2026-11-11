@@ -104,6 +104,28 @@ describe('The node editor', () => {
     expect(ws.space.out(pump).map(e => e.target)).toContain(`${DI}|i=1002`);
   });
 
+  it('adds a subtype of the type shown, also of a type of another model', async () => {
+    const DI = 'http://opcfoundation.org/UA/DI/';
+    const ws = new Workspace();
+    await ws.create('http://example.org/Plant/');
+    await ws.addBundled(DI);
+    const opened: string[] = [];
+    act(() => root.render(
+      <NodeEditor space={ws.space} editor={ws.editor!} nodeKey={`${DI}|i=1002`} run={action => action()}
+        onOpenType={key => opened.push(key)} onCreated={() => undefined} onInstance={() => undefined} />));
+    const section = Array.from(host.querySelectorAll('fieldset')).find(f => f.querySelector('legend')?.textContent === 'Add subtype')!;
+    const name = section.querySelector('input') as HTMLInputElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'PumpDeviceType');
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    act(() => { section.querySelector('button')!.click(); });
+
+    const created = ws.editable!.nodes.find(n => n.browseName.name === 'PumpDeviceType')!;
+    expect(ws.space.supertypeKey(created.id)).toBe(`${DI}|i=1002`);
+    expect(opened).toEqual([created.id]);
+  });
+
   it('lets a variable be written, historized and sampled from the panel', async () => {
     const ws = new Workspace();
     await ws.create('http://example.org/Types/');

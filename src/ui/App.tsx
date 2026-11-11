@@ -3,7 +3,7 @@ import { NodeSetModeler } from '../modeler/Modeler';
 import { RULE } from '../nodeset/address-space';
 import { insideType } from '../nodeset/checks';
 import { check, Finding, RULES } from '../nodeset/checks';
-import { EditError } from '../nodeset/edit';
+import { EditError, TYPE_DEFAULTS } from '../nodeset/edit';
 import { NodeClass, text, UaNode } from '../nodeset/model';
 import { applyTheme, HostBridge, HostToModeler, savesAll } from '../host/bridge';
 import { Workspace } from '../workspace';
@@ -17,7 +17,7 @@ import { topInstances } from './instances';
 import { t, translate } from './i18n';
 import { Ask, AskDialog } from './AskDialog';
 import { ModelPanel } from './ModelPanel';
-import { NodeEditor } from './NodeEditor';
+import { NodeEditor, typeOptions } from './NodeEditor';
 
 const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType'; title: string }[] = [
   { nodeClass: 'ObjectType', title: 'ObjectTypes' },
@@ -486,10 +486,19 @@ function Modeler({ kept, host, onDirty, backup, inbox }: ModelerProps) {
 
   const addType = (nodeClass: typeof TYPE_GROUPS[number]['nodeClass']) => {
     if (!workspace?.editor) return;
+    // The supertype is asked with the name, the base type of its kind offered.
+    const options = typeOptions(workspace.space, nodeClass);
+    const keyOf = (name: string) => options.find(o => o.name === name)?.key;
     setAsk({
       title: t('Name of the new {0}', nodeClass),
-      onOk: name => run(() => {
-        const key = workspace.editor!.addType(nodeClass, name);
+      extra: {
+        label: t('Supertype'),
+        value: options.find(o => o.key === TYPE_DEFAULTS[nodeClass].supertype)?.name,
+        options: options.map(o => o.name),
+        check: name => (keyOf(name) ? undefined : t("There is no {0} named '{1}'.", nodeClass, name)),
+      },
+      onOk: (name, supertype) => run(() => {
+        const key = workspace.editor!.addType(nodeClass, name, keyOf(supertype ?? ''));
         select(key, key);
       }),
     });

@@ -137,6 +137,7 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       {(node.nodeClass === 'ObjectType' || node.nodeClass === 'VariableType') && (
         <InstantiateSection space={space} editor={editor} type={node} run={run} onCreated={onInstance} />
       )}
+      {isType && <AddSubtype editor={editor} type={node} run={run} onCreated={onOpenType} />}
       {own && (
         <div className="actions">
           {isType && <button onClick={() => onOpenType(nodeKey)}>{t('Show diagram')}</button>}
@@ -261,6 +262,28 @@ function AddChild({ editor, parent, run, onCreated, declaration }: {
   );
 }
 
+/** A subtype of the type shown, in the model being edited, whichever model the type belongs to. */
+function AddSubtype({ editor, type, run, onCreated }: { editor: ModelEditor; type: UaNode; run: Props['run']; onCreated: (key: string) => void }) {
+  const [name, setName] = useState('');
+  const add = () => {
+    if (!name.trim()) return;
+    run(() => {
+      const key = editor.addType(type.nodeClass as 'ObjectType' | 'VariableType' | 'DataType' | 'ReferenceType', name, type.id);
+      setName('');
+      onCreated(key);
+    });
+  };
+  return (
+    <fieldset className="add">
+      <legend>{t('Add subtype')}</legend>
+      <div className="row">
+        <input placeholder={t('Name')} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
+        <button onClick={add} disabled={!name.trim()}>{t('Add')}</button>
+      </div>
+    </fieldset>
+  );
+}
+
 function Field({ label: title, children }: { label: string; children: React.ReactNode }) {
   return <label className="field"><span>{title}</span><div>{children}</div></label>;
 }
@@ -282,14 +305,7 @@ function TextInput({ value, disabled, multiline, placeholder, onCommit }: {
 export function TypePicker({ space, nodeClass, value, disabled, onPick, placeholder }: {
   space: AddressSpace; nodeClass: NodeClass; value?: string; disabled?: boolean; onPick: (key: string) => void; placeholder?: string;
 }) {
-  const options = useMemo(() => {
-    const nodes = space.ofClass(nodeClass);
-    const count = new Map<string, number>();
-    for (const n of nodes) count.set(label(n), (count.get(label(n)) ?? 0) + 1);
-    return nodes
-      .map(n => ({ key: n.id, name: count.get(label(n))! > 1 ? `${label(n)} (${shortNs(n.browseName.namespaceUri)})` : label(n) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [space, nodeClass]);
+  const options = useMemo(() => typeOptions(space, nodeClass), [space, nodeClass]);
   const current = options.find(o => o.key === value)?.name ?? '';
   const [draft, setDraft] = useState(current);
   useEffect(() => setDraft(current), [current]);
@@ -306,6 +322,19 @@ export function TypePicker({ space, nodeClass, value, disabled, onPick, placehol
       <datalist id={listId}>{options.map(o => <option key={o.key} value={o.name} />)}</datalist>
     </>
   );
+}
+
+/** Sorts as localeCompare does, without making a collator for every comparison of a list of hundreds. */
+const collator = new Intl.Collator();
+
+/** The nodes of one NodeClass by name, sorted; a name that occurs in several models carries its namespace. */
+export function typeOptions(space: AddressSpace, nodeClass: NodeClass): { key: string; name: string }[] {
+  const nodes = space.ofClass(nodeClass);
+  const count = new Map<string, number>();
+  for (const n of nodes) count.set(label(n), (count.get(label(n)) ?? 0) + 1);
+  return nodes
+    .map(n => ({ key: n.id, name: count.get(label(n))! > 1 ? `${label(n)} (${shortNs(n.browseName.namespaceUri)})` : label(n) }))
+    .sort((a, b) => collator.compare(a.name, b.name));
 }
 
 function shortNs(uri: string): string {

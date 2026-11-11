@@ -220,7 +220,8 @@ starts the modeler anew with the same model.
 ## Types
 
 Each group of the list has a **+** that adds a type of its kind; a dialog
-asks for the name. A new type starts with this supertype:
+asks for the name and the supertype, suggesting the types of all loaded
+models. The supertype it offers first:
 
 | New | Supertype | Also |
 |---|---|---|
@@ -233,6 +234,10 @@ Every type has the fields **Name** (the BrowseName; the DisplayName follows
 it), **NodeId** (assigned by the modeler), **Description**, **Supertype** and
 **Abstract**. Type a supertype's name to change it; the modeler refuses one
 that is a subtype of the type itself. An abstract type has no instances.
+
+**Add subtype** in the panel of a type adds a subtype of it to your model,
+also of a type of a loaded model (DeviceType of DI, FolderType of the base
+model): type the name and click **Add**; the new type is shown.
 
 ObjectTypes and VariableTypes hold instance declarations, the subject of the
 [next chapter](#instance-declarations-and-modellingrules). A state machine
