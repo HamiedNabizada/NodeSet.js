@@ -133,6 +133,28 @@ describe('Editing a model', () => {
   });
 });
 
+describe('DisplayName and BrowseName', () => {
+  it('gives a node a DisplayName of its own, which renaming then leaves alone', async () => {
+    const { ws, editor, speed } = await pumpModel();
+    const shown = () => ws.space.get(speed)!.displayName;
+    ws.editable!.nodes.find(n => n.id === speed)!.displayName = [{ text: 'Speed' }, { text: 'Drehzahl', locale: 'de' }];
+    editor.acceptOutsideChanges();
+
+    editor.setDisplayName(speed, 'Rotational speed');
+    expect(shown()).toEqual([{ text: 'Rotational speed' }, { text: 'Drehzahl', locale: 'de' }]);
+    editor.rename(speed, 'RotationalSpeed');
+    expect(ws.space.get(speed)!.browseName.name).toBe('RotationalSpeed');
+    expect(shown()[0].text).toBe('Rotational speed');
+    expect(readNodeSet(ws.save()).nodes.find(n => n.id === speed)!.displayName[0].text).toBe('Rotational speed');
+
+    // Empty, it is the BrowseName again, and follows it.
+    editor.setDisplayName(speed, ' ');
+    expect(shown()[0].text).toBe('RotationalSpeed');
+    editor.rename(speed, 'Speed');
+    expect(shown()).toEqual([{ text: 'Speed' }, { text: 'Drehzahl', locale: 'de' }]);
+  });
+});
+
 describe('Access to a variable', () => {
   it('sets AccessLevel, UserAccessLevel, Historizing and MinimumSamplingInterval, writes them and hands them to instances', async () => {
     const { ws, editor, pump, speed } = await pumpModel();

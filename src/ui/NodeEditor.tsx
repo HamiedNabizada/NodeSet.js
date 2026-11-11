@@ -55,6 +55,10 @@ export function NodeEditor({ space, editor, nodeKey, run, onOpenType, onCreated,
       <Field label={t('Name')}>
         <TextInput value={node.browseName.name} disabled={!own} onCommit={v => run(() => editor.rename(nodeKey, v))} />
       </Field>
+      <Field label="DisplayName">
+        <TextInput value={text(node.displayName)} disabled={!own} placeholder={node.browseName.name}
+          onCommit={v => run(() => editor.setDisplayName(nodeKey, v))} />
+      </Field>
       <Field label="NodeId"><span className="mono">{id.identifier}</span></Field>
       <Field label={t('Description')}>
         <TextInput value={text(node.description)} disabled={!own} multiline onCommit={v => run(() => editor.setDescription(nodeKey, v))} />

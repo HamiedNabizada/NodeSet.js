@@ -230,8 +230,9 @@ models. The supertype it offers first:
 | DataType | Structure | the encodings "Default Binary", "Default XML" and "Default JSON" |
 | ReferenceType | NonHierarchicalReferences | InverseName "Inverse" and the name |
 
-Every type has the fields **Name** (the BrowseName; the DisplayName follows
-it), **NodeId** (assigned by the modeler), **Description**, **Supertype** and
+Every type has the fields **Name** (the BrowseName), **DisplayName** (the
+name shown, which follows the Name until you give it one of its own; empty,
+it is the Name again), **NodeId** (assigned by the modeler), **Description**, **Supertype** and
 **Abstract**. Type a supertype's name to change it; the modeler refuses one
 that is a subtype of the type itself. An abstract type has no instances.
 
@@ -368,7 +369,8 @@ line.
 
 ### Renaming and deleting
 
-**Name** renames the node; its DisplayName follows. **Delete** in the panel,
+**Name** renames the node; its DisplayName follows, unless it was given one
+of its own in **DisplayName**, which every node has. **Delete** in the panel,
 or **×** in the context pad, deletes the node, everything it holds and every
 reference to them. A type that has subtypes is not deleted: "'…' has
 subtypes; delete or move them first." Nor is a DataType that a variable, an
@@ -750,8 +752,8 @@ What the modeler does not edit, or edits only in part:
   its NodeSet.
 - **NodeIds** are assigned by the modeler, numbers from 1000 upward, and
   cannot be changed.
-- **Attributes without a field** in the panel, such as the DisplayName apart
-  from the name, texts in further locales, the bits of AccessLevel beyond
+- **Attributes without a field** in the panel, such as texts in further
+  locales (the DisplayName and the Description in the first), the bits of AccessLevel beyond
   read and write, ArrayDimensions and SymbolicName, are kept as they were
   read.
 - **DataType fields**: their descriptions, the descriptions of enumeration

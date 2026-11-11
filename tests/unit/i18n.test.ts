@@ -57,7 +57,7 @@ describe('The interface in German', () => {
   it('shows no text that passes t() by', () => {
     const ALLOWED = new Set([
       'NodeSet.js', 'OK', 'Namespace', 'Version', 'NodeId', 'TypeDefinition', 'ModellingRule', 'DataType', 'ValueRank', 'InverseName',
-      'AccessLevel', 'UserAccessLevel', 'Historizing', 'MinimumSamplingInterval',
+      'AccessLevel', 'UserAccessLevel', 'Historizing', 'MinimumSamplingInterval', 'DisplayName',
       'Variable (HasComponent)', 'Property (HasProperty)', 'Object (HasComponent)', 'Method (HasComponent)',
       'Ctrl+S', 'Ctrl+Z', 'Ctrl+Y, Ctrl+Shift+Z',
       // A font, and an error for the programmer who calls the library.

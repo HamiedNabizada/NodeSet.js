@@ -460,9 +460,23 @@ export class ModelEditor {
       if (parent && this.space().children(parent).some(c => c.node.id !== key && c.node.browseName.name === trimmed)) {
         throw new EditError(msg`'${parent.browseName.name}' already has a child named '${trimmed}'.`);
       }
+      // The DisplayName follows the name unless it was given one of its own; texts in other locales stay.
+      if (!text(n.displayName) || text(n.displayName) === n.browseName.name) n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }, ...n.displayName.slice(1)];
       n.browseName = { ...n.browseName, name: trimmed };
-      n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }];
       if (n.definition) n.definition.name = n.browseName;
+    });
+  }
+
+  /**
+   * The DisplayName apart from the BrowseName, in its first locale; texts in
+   * other locales stay. Empty text makes it the BrowseName again, which a
+   * rename then carries along.
+   */
+  setDisplayName(key: string, displayName: string): void {
+    this.change(() => {
+      const n = this.node(key);
+      const trimmed = displayName.trim() || n.browseName.name;
+      n.displayName = [{ ...(n.displayName[0] ?? {}), text: trimmed }, ...n.displayName.slice(1)];
     });
   }
 

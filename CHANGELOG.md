@@ -8,6 +8,10 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ### Added
 
+- **DisplayName** in the panel, apart from the name (`setDisplayName`):
+  renaming carries it along only while it is the BrowseName; empty, it is
+  the BrowseName again. Texts in further locales stay, also on renaming,
+  which kept only the first before.
 - **Add subtype** in the panel of any type, also of a loaded model's (DI's
   DeviceType, say), adds a subtype of it to the model. The dialog of a new
   type asks for its supertype with its name.
