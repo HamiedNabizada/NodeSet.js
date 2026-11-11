@@ -95,7 +95,7 @@ input, select, textarea { background: var(--field); color: var(--ink); }
 .editor .kind { font-weight: normal; font-size: 12px; color: var(--muted); margin-left: 6px; }
 .editor .note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .field { display: grid; grid-template-columns: 96px 1fr; gap: 6px; align-items: start; margin: 5px 0; font-size: 13px; }
-.field > span { color: var(--muted); padding-top: 4px; }
+.field > span { color: var(--muted); padding-top: 4px; overflow-wrap: anywhere; }
 .field > div { display: flex; gap: 4px; min-width: 0; }
 .field input:not([type=checkbox]), .field select, .field textarea { flex: 1; min-width: 0; font: inherit; padding: 3px 6px; border: 1px solid var(--line); border-radius: 5px; }
 .field input:disabled, .field select:disabled, .field textarea:disabled { background: var(--panel); color: var(--muted); }

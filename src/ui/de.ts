@@ -278,6 +278,7 @@ export const de: Record<string, string> = {
   "optional": "optional",
   "optional, not set": "optional, nicht gesetzt",
   "ms; -1 not known, 0 continuously": "ms; -1 unbekannt, 0 fortlaufend",
+  "ms": "ms",
   "read": "lesen",
   "required": "benötigt",
   "set field": "gesetztes Feld",

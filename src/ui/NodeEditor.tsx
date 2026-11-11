@@ -212,8 +212,9 @@ function AccessFields({ editor, node, own, run }: { editor: ModelEditor; node: U
         <input type="checkbox" checked={node.otherAttributes.Historizing === 'true'} disabled={!own}
           onChange={e => run(() => editor.setAccess(node.id, { historizing: e.target.checked }))} />
       </Group>
-      <Field label="MinimumSamplingInterval">
-        <TextInput value={node.otherAttributes.MinimumSamplingInterval ?? ''} disabled={!own} placeholder={t('ms; -1 not known, 0 continuously')}
+      {/* Break opportunities between its words: the label column is narrow. */}
+      <Field label={'Minimum\u200BSampling\u200BInterval'} hint={t('ms; -1 not known, 0 continuously')}>
+        <TextInput value={node.otherAttributes.MinimumSamplingInterval ?? ''} disabled={!own} placeholder={t('ms')}
           onCommit={v => run(() => editor.setAccess(node.id, { minimumSamplingInterval: v.trim() === '' ? undefined : Number(v) }))} />
       </Field>
     </>
@@ -289,8 +290,8 @@ function AddSubtype({ editor, type, run, onCreated }: { editor: ModelEditor; typ
   );
 }
 
-function Field({ label: title, children }: { label: string; children: React.ReactNode }) {
-  return <label className="field"><span>{title}</span><div>{children}</div></label>;
+function Field({ label: title, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return <label className="field" title={hint}><span>{title}</span><div>{children}</div></label>;
 }
 
 /** A text field that commits on Enter or when it loses focus. */
