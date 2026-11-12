@@ -29,7 +29,7 @@ const TYPE_GROUPS: { nodeClass: 'ObjectType' | 'VariableType' | 'DataType' | 'Re
 type Status = { text: string; warn?: boolean };
 
 /** Told to the host in "ready". */
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 /** What is open, kept outside the modeler so that a failure of the modeler does not take it along. */
 interface Kept {

@@ -741,7 +741,7 @@ own:
 - The page stays editable while the plugin imports or saves. What you change
   meanwhile is not in what the plugin took, so **Save NodeSet** keeps its
   `*` and the status line says so, provided the plugin reports which change
-  it took (plugins before NodeSet.js 0.2.1 do not; with them the model counts
+  it took (plugins before NodeSet.js 0.3.0 do not; with them the model counts
   as saved once the plugin answers).
 - There is no backup in the browser, and the page follows the editor's
   light or dark theme.

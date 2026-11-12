@@ -6,6 +6,8 @@ Until 1.0.0 the library's shape may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
 ### Added
 
 - **Export SVG** in the toolbar saves the diagram shown as an SVG picture

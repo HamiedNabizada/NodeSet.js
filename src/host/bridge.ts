@@ -14,7 +14,7 @@
 // therefore carry "change", the number of the last change the NodeSet holds,
 // and a host that echoes it in "applied" or "saved" lets the modeler count the
 // model as unchanged only when nothing was changed since. A host that does not
-// echo it (before 0.2.1) is taken at its word, as before.
+// echo it (before 0.3.0) is taken at its word, as before.
 
 export type HostToModeler =
   | { type: 'open'; name: string; xml: string; required?: string[] }
